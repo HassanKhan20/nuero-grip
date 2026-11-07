@@ -10,7 +10,12 @@ LATENCY_TIMEOUT_MS = 3000
 
 
 class SessionMetrics:
-    def __init__(self, difficulty: int = 3):
+    def __init__(self, difficulty: int = 3, latency_response: str = "intent"):
+        self.latency_response = latency_response  # "intent" (headband) or "grip" (camera sees a squeeze)
+        self._prev_grip = False
+        self.cv_tremor_hz = 0.0
+        self.tremor_amp = 0.0
+        self.tapping: dict | None = None
         self.reps = 0
         self._armed = False
         self._target_frames = 0
@@ -27,6 +32,10 @@ class SessionMetrics:
 
     def start_latency_trial(self, cue_ms: int) -> None:
         self._cue_ms = cue_ms
+
+    @property
+    def trial_active(self) -> bool:
+        return self._cue_ms is not None
 
     def update(self, t_ms: int, intent: IntentState, vision: VisionResult, gate: GateOutput) -> list[dict]:
         new: list[dict] = []
@@ -48,8 +57,14 @@ class SessionMetrics:
             new.append({"t": t_ms, "type": kind})
         self._prev_comp = comp
 
+        grip = peak is not None and peak >= REP_HIGH
+        if self.latency_response == "grip":
+            responded = grip and not self._prev_grip
+        else:
+            responded = intent.active and not self._prev_active
+        self._prev_grip = grip
         if self._cue_ms is not None:
-            if intent.active and not self._prev_active and t_ms >= self._cue_ms:
+            if responded and t_ms >= self._cue_ms:
                 ms = t_ms - self._cue_ms
                 self.latencies.append(ms)
                 new.append({"t": t_ms, "type": "latency", "ms": ms})
@@ -70,7 +85,11 @@ class SessionMetrics:
             "events": list(self.events),
             "latency_ms_mean": round(sum(self.latencies) / len(self.latencies)) if self.latencies else None,
             "latency_trials": len(self.latencies),
+            "latencies": self.latencies[-10:],
             "tremor_hz": self.tremor_hz,
+            "cv_tremor_hz": self.cv_tremor_hz,
+            "tremor_amp": self.tremor_amp,
+            "tapping": self.tapping,
             "steadiness": self.steadiness,
             "difficulty": self.difficulty,
         }

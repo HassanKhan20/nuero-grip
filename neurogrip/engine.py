@@ -3,41 +3,57 @@ import logging
 import math
 import os
 import queue
+import random
 import threading
 import time
 from collections import deque
+from typing import Callable
 
 import numpy as np
 
+from .clinical import analyze_tapping, cv_tremor
 from .gate import THRESHOLDS, Gate
 from .intent import IntentDetector
 from .metrics import SessionMetrics
 from .protocol import fmt_buzzer, fmt_led, fmt_servo
 from .signals import steadiness, tremor_frequency
-from .sources import FRAME_MS, MockSource, SerialSource
+from .sources import FRAME_MS, IntentControl, MockSource, SerialSource
 from .store import make_store
 from .vision import CameraVision, MockVision
 
 log = logging.getLogger(__name__)
 
 MODES = ["stroke", "parkinsons", "phantom", "cp", "cognitive"]
+KINDS = ["mock", "camera", "hardware"]
 DEFAULT_LEVEL = 3
 SENSOR_TIMEOUT_S = 1.0
+CV_TREMOR_WINDOW_S = 5.0
+CUE_DELAY_MS = (1000, 3000)
 
 
 class Engine:
-    def __init__(self, source, vision, store, patient_id: str = "demo"):
+    def __init__(self, source, vision, store, patient_id: str = "demo", kind: str = "mock"):
         self.source, self.vision, self.store, self.patient_id = source, vision, store, patient_id
+        self.kind = kind
+        self.control: IntentControl = getattr(source, "control", None) or IntentControl()
+        self._latency_response = "grip" if kind == "camera" else "intent"
         self.intent = IntentDetector(threshold=THRESHOLDS[DEFAULT_LEVEL - 1])
         self.gate = Gate()
-        self.metrics = SessionMetrics(difficulty=DEFAULT_LEVEL)
+        self.metrics = SessionMetrics(difficulty=DEFAULT_LEVEL, latency_response=self._latency_response)
         self.mode = "stroke"
+        self.listeners: list[Callable[[dict], None]] = []
         self.new_events: deque[dict] = deque(maxlen=200)
         self._mags: deque[float] = deque(maxlen=256)
+        self._cv_hist: deque[tuple[float, float, float]] = deque(maxlen=400)
+        self._last_frame_id = -1
         self._frames = 0
         self._t_ms = 0
         self._last_led: str | None = None
         self._last_frame_at = 0.0
+        self._cue_at_ms: int | None = None
+        self._tap_start_ms: int | None = None
+        self._tap_duration_ms = 10000
+        self._tap_samples: list[tuple[float, float]] = []
         self._outbox: queue.Queue = queue.Queue(maxsize=1000)
         self._writer: threading.Thread | None = None
         self._lock = threading.RLock()
@@ -67,11 +83,27 @@ class Engine:
                 self.source.send(fmt_buzzer(g.buzzer_hz, 110))
 
             self._mags.append(math.sqrt(f.ax ** 2 + f.ay ** 2 + f.az ** 2))
+            if v.frame_id != self._last_frame_id:
+                self._last_frame_id = v.frame_id
+                if v.wrist is not None:
+                    self._cv_hist.append((v.t, v.wrist[0], v.wrist[1]))
+                if self._tap_start_ms is not None and v.pinch is not None:
+                    self._tap_samples.append((v.t, v.pinch))
             self._frames += 1
-            if self._frames % 25 == 0 and len(self._mags) >= 128:
-                arr = np.array(self._mags)
-                self.metrics.tremor_hz = tremor_frequency(arr)
-                self.metrics.steadiness = steadiness(arr)
+            if self._frames % 25 == 0:
+                self._update_tremor()
+
+            if self._cue_at_ms is not None and f.ms >= self._cue_at_ms:
+                self._cue_at_ms = None
+                self.source.send(fmt_buzzer(1500, 150))
+                self.source.send(fmt_led("G"))
+                self._last_led = "G"
+                self.metrics.start_latency_trial(f.ms)
+                events.append({"t": f.ms, "type": "cue"})
+
+            if self._tap_start_ms is not None and f.ms - self._tap_start_ms >= self._tap_duration_ms:
+                result = self._finish_tapping()
+                events.append({"t": f.ms, "type": "tapping", **result})
 
             for e in events:
                 self._persist({**e, "patient_id": self.patient_id, "mode": self.mode})
@@ -79,7 +111,38 @@ class Engine:
             self._live = {"angles": g.angles, "gate_open": g.open, "intent_strength": round(istate.strength, 2),
                           "intent_active": istate.active, "calibrated": istate.calibrated,
                           "curls": v.curls, "led": g.led, "compensation": list(v.compensation)}
-            return self._live
+            live = self._live
+        for e in events:  # outside the lock: listeners do socket I/O
+            for fn in list(self.listeners):
+                try:
+                    fn(e)
+                except Exception:
+                    log.exception("event listener failed")
+        return live
+
+    def _update_tremor(self) -> None:
+        if len(self._mags) >= 128:
+            arr = np.array(self._mags)
+            self.metrics.tremor_hz = tremor_frequency(arr)
+            self.metrics.steadiness = steadiness(arr)
+        if len(self._cv_hist) >= 30:
+            hist = np.array(self._cv_hist)
+            recent = hist[hist[:, 0] >= hist[-1, 0] - CV_TREMOR_WINDOW_S]
+            hz, amp = cv_tremor(recent[:, 0], recent[:, 1:])
+            self.metrics.cv_tremor_hz, self.metrics.tremor_amp = hz, amp
+        if self.kind == "camera":  # no wristband: the camera is the tremor sensor
+            self.metrics.tremor_hz = self.metrics.cv_tremor_hz
+            self.metrics.steadiness = round(max(0.0, 100.0 - self.metrics.tremor_amp * 5000), 1)
+
+    def _finish_tapping(self) -> dict:
+        samples, self._tap_samples, self._tap_start_ms = self._tap_samples, [], None
+        if len(samples) < 2:
+            result = {"error": "too few taps", "taps": 0}
+        else:
+            arr = np.array(samples)
+            result = analyze_tapping(arr[:, 0], arr[:, 1])
+        self.metrics.tapping = result
+        return result
 
     def _persist(self, doc: dict) -> None:
         """Queue an event for the store; a slow or dead database must never stall the servo loop."""
@@ -101,8 +164,18 @@ class Engine:
 
     def state(self) -> dict:
         with self._lock:
+            tapping_left = 0.0
+            if self._tap_start_ms is not None:
+                tapping_left = max(0.0, (self._tap_duration_ms - (self._t_ms - self._tap_start_ms)) / 1000)
             return {**self.metrics.snapshot(), **self._live, "mode": self.mode, "patient_id": self.patient_id,
-                    "sensors_ok": time.monotonic() - self._last_frame_at < SENSOR_TIMEOUT_S}
+                    "sensors_ok": time.monotonic() - self._last_frame_at < SENSOR_TIMEOUT_S,
+                    "source_kind": self.kind,
+                    "camera_ok": getattr(self.vision, "available", True),
+                    "intent_held": self.control.held, "intent_auto": self.control.auto,
+                    "cue_pending": self._cue_at_ms is not None,
+                    "cue_active": self.metrics.trial_active,
+                    "tapping_active": self._tap_start_ms is not None,
+                    "tapping_remaining_s": round(tapping_left, 1)}
 
     def set_difficulty(self, level: int) -> int:
         level = max(1, min(5, int(level)))
@@ -112,11 +185,17 @@ class Engine:
         return level
 
     def cue_latency(self) -> None:
+        """Schedule a reaction cue 1-3 s from now (random so the patient can't anticipate it)."""
         with self._lock:
-            self.source.send(fmt_buzzer(1500, 150))
-            self.source.send(fmt_led("G"))
-            self._last_led = "G"
-            self.metrics.start_latency_trial(self._t_ms)
+            if self._cue_at_ms is not None or self.metrics.trial_active:
+                return
+            self._cue_at_ms = self._t_ms + random.randint(*CUE_DELAY_MS)
+
+    def start_tapping_test(self, duration_s: float = 10.0) -> None:
+        with self._lock:
+            self._tap_start_ms = self._t_ms
+            self._tap_duration_ms = int(duration_s * 1000)
+            self._tap_samples = []
 
     def set_mode(self, mode: str) -> None:
         if mode not in MODES:
@@ -127,7 +206,7 @@ class Engine:
     def end_session(self) -> str:
         with self._lock:
             doc = {"patient_id": self.patient_id, "mode": self.mode, **self.metrics.snapshot()}
-            self.metrics = SessionMetrics(difficulty=self.metrics.difficulty)
+            self.metrics = SessionMetrics(difficulty=self.metrics.difficulty, latency_response=self._latency_response)
         return self.store.save_session(doc)  # outside the lock: network I/O
 
     def run_forever(self, stop: threading.Event) -> None:
@@ -144,8 +223,22 @@ class Engine:
         self.vision.stop()
 
 
+def source_kind_from_env() -> str:
+    if os.environ.get("NG_MOCK") == "1":
+        return "mock"
+    kind = os.environ.get("NG_MODE", "camera").lower()
+    if kind not in KINDS:
+        raise ValueError(f"NG_MODE must be one of {KINDS}")
+    return kind
+
+
 def make_engine() -> Engine:
     store = make_store()
-    if os.environ.get("NG_MOCK") == "1":
-        return Engine(MockSource(tremor_hz=float(os.environ.get("NG_MOCK_TREMOR", "4.5"))), MockVision(), store)
-    return Engine(SerialSource(os.environ["NG_SERIAL_PORT"]), CameraVision(int(os.environ.get("NG_CAMERA", "0"))), store)
+    kind = source_kind_from_env()
+    camera = int(os.environ.get("NG_CAMERA", "0"))
+    if kind == "mock":
+        tremor = float(os.environ.get("NG_MOCK_TREMOR", "4.5"))
+        return Engine(MockSource(tremor_hz=tremor, realtime=True), MockVision(tremor_hz=tremor), store, kind="mock")
+    if kind == "camera":
+        return Engine(MockSource(control=IntentControl(), realtime=True), CameraVision(camera), store, kind="camera")
+    return Engine(SerialSource(os.environ["NG_SERIAL_PORT"]), CameraVision(camera), store, kind="hardware")

@@ -63,3 +63,13 @@ def test_compensation_event_on_rising_edge_only():
         events += m.update(i * 20, ACTIVE, _v(0.3, ["shoulder_hike"]), _g(False))
     assert events == [{"t": 0, "type": "shoulder_hike"}]
     assert m.snapshot()["compensation_count"] == 1
+
+
+def test_grip_latency_response():
+    m = SessionMetrics(latency_response="grip")
+    m.start_latency_trial(1000)
+    assert m.trial_active
+    assert m.update(1100, ACTIVE, _v(0.2), _g(False)) == []  # intent alone doesn't count
+    ev = m.update(1400, IDLE, _v(0.8), _g(False))
+    assert {"t": 1400, "type": "latency", "ms": 400} in ev
+    assert m.snapshot()["latencies"] == [400] and not m.trial_active

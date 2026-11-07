@@ -36,10 +36,33 @@ def test_set_difficulty_clamps():
     assert e.state()["difficulty"] == 1
 
 
-def test_cue_latency_sends_cue():
+def test_cue_fires_after_delay():
     e = _engine()
+    got = []
+    e.listeners.append(got.append)
+    for _ in range(10):
+        e.step()
     e.cue_latency()
+    assert e.state()["cue_pending"]
+    for _ in range(45):  # < 1 s: too early for the cue
+        e.step()
+    assert not any(ev["type"] == "cue" for ev in got)
+    for _ in range(120):
+        e.step()
+    assert any(ev["type"] == "cue" for ev in got)
     assert "B,1500,150\n" in e.source.sent
+
+
+def test_cue_twice_single_trial():
+    e = _engine()
+    got = []
+    e.listeners.append(got.append)
+    e.step()
+    e.cue_latency()
+    e.cue_latency()
+    for _ in range(200):
+        e.step()
+    assert sum(ev["type"] == "cue" for ev in got) == 1
 
 
 def test_end_session_persists():
@@ -123,3 +146,37 @@ def test_serial_source_reconnects(monkeypatch):
     monkeypatch.setattr(sources, "RECONNECT_DELAY_S", 0)
     src = sources.SerialSource("COM9")
     assert src.read().ms == 5 and len(opened) == 2
+
+
+def test_cv_tremor_from_mock_vision():
+    e = Engine(MockSource(), MockVision(tremor_hz=5), MemoryStore(), kind="camera")
+    for _ in range(400):
+        e.step()
+    s = e.state()
+    assert abs(s["cv_tremor_hz"] - 5) < 0.6 and s["tremor_hz"] == s["cv_tremor_hz"]
+    assert s["source_kind"] == "camera" and s["tremor_amp"] > 0.002
+
+
+def test_tapping_test_completes():
+    e = Engine(MockSource(), MockVision(), MemoryStore(), kind="camera")
+    got = []
+    e.listeners.append(got.append)
+    e.step()
+    e.start_tapping_test(3.0)
+    assert e.state()["tapping_active"]
+    for _ in range(200):
+        e.step()
+    s = e.state()
+    assert not s["tapping_active"] and s["tapping"]["taps"] >= 3
+    assert any(ev["type"] == "tapping" for ev in got)
+
+
+def test_listener_exception_does_not_break_step():
+    e = _engine()
+
+    def bad(ev):
+        raise RuntimeError("socket gone")
+    e.listeners.append(bad)
+    for _ in range(600):
+        e.step()
+    assert len(e.new_events) > 0
