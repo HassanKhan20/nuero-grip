@@ -1,6 +1,8 @@
 # nuero-grip
 motor-intent rehabilitation platform. headband detects cognitive/motor intent, CV tracks healthy hand, gating engine controls robotic actuation. covers stroke, parkinson's, phantom limb, CP, and cognitive screening.
 
+**Team: start with [docs/PROGRESS.md](docs/PROGRESS.md).** It covers what's done, what's next and the hardware checklist.
+
 ## run it
 
 ```powershell
