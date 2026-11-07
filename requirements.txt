@@ -1,0 +1,10 @@
+numpy
+pyserial
+opencv-python
+mediapipe
+flask
+flask-socketio
+pymongo
+openai
+google-genai
+pytest
