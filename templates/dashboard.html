@@ -28,6 +28,7 @@
   <symbol id="i-tap" viewBox="0 0 24 24"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 10.5V9a1.5 1.5 0 0 1 3 0v2M15 10.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4 15.5a1.5 1.5 0 0 1 2.4-1.8L9 16"/></symbol>
   <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l3 2M10 3h4"/></symbol>
   <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 7-8M15 7h5v5"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7M12 17.2v.1"/></symbol>
   <symbol id="i-hash" viewBox="0 0 24 24"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"/></symbol>
 </svg>
 
@@ -40,7 +41,8 @@
     {% endif %}
     <button type="button" class="dock-btn" data-sheet="sheet-sensors" aria-label="Sensors" title="Sensors"><svg><use href="#i-sliders"/></svg></button>
     <button type="button" class="dock-btn" data-sheet="sheet-activity" aria-label="Activity" title="Activity"><svg><use href="#i-list"/></svg></button>
-    <a class="dock-btn end" href="/logout" aria-label="Sign out" title="Sign out"><svg><use href="#i-exit"/></svg></a>
+    <button type="button" id="btn-tour" class="dock-btn end" aria-label="Show tour" title="Show tour"><svg><use href="#i-help"/></svg></button>
+    <a class="dock-btn" href="/logout" aria-label="Sign out" title="Sign out"><svg><use href="#i-exit"/></svg></a>
   </nav>
 
   <main class="window">

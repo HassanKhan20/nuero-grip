@@ -1,4 +1,5 @@
 import { createHand } from "./hand.js";
+import { createTour } from "./onboarding.js";
 
 const $ = (id) => document.getElementById(id);
 const role = document.body.dataset.role;
@@ -321,7 +322,10 @@ function renderOverlays(s) {
 }
 
 // ---------- main render ----------
+let tourChecked = false;
 function render(s) {
+  window.dispatchEvent(new CustomEvent("ng-state", { detail: s }));
+  if (!tourChecked) { tourChecked = true; tour.startIfNew(); }
   if (s.mode !== currentMode) { currentMode = s.mode; applyCondition(s.mode); }
   const src = SOURCE_LABELS[s.source_kind] || s.source_kind;
   setText("source-label", src);
@@ -341,6 +345,10 @@ function render(s) {
   drawTrials(s.latencies || []);
   if (s.tapping) renderTapping(s.tapping);
 }
+
+// ---------- onboarding ----------
+const tour = createTour({ role, api, toast });
+$("btn-tour").addEventListener("click", () => tour.start());
 
 // ---------- socket ----------
 const socket = io();

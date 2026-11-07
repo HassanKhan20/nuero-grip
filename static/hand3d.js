@@ -2,10 +2,11 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/OrbitControls.js";
 
-const OLIVE = 0x9fb04a;
-const OLIVE_BRIGHT = 0xd6e68f;
-const RED = 0xe0694f;
-const AMBER = 0xe3a24c;
+const OLIVE = 0x1f6feb;        // accent blue (name kept for brevity)
+const OLIVE_BRIGHT = 0x4d8dff; // light accent blue
+const GOOD = 0x12a150;
+const RED = 0xdc3545;
+const AMBER = 0xd97706;
 
 // index -> pinky, laid out across the top of the palm
 const FINGERS = [
@@ -51,7 +52,7 @@ export function createHand3D(container) {
   container.replaceChildren(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x0d100b, 8, 17);
+  scene.fog = new THREE.Fog(0xe4ebf4, 10, 22);
   const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 60);
   camera.position.set(3.4, 1.9, 8.6);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -61,26 +62,26 @@ export function createHand3D(container) {
   controls.minDistance = 5;
   controls.maxDistance = 13;
 
-  scene.add(new THREE.HemisphereLight(0xf3f1e6, 0x23261a, 1.1));
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xc3cfdf, 1.35));
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
   keyLight.position.set(3, 5, 4);
   scene.add(keyLight);
-  const rim = new THREE.PointLight(OLIVE, 8, 9);
+  const rim = new THREE.PointLight(OLIVE, 3, 9);
   rim.position.set(-2.2, 1.6, -2);
   scene.add(rim);
   const glow = new THREE.PointLight(OLIVE, 0, 5);
   glow.position.set(0, 0.9, 1.7);
   scene.add(glow);
 
-  const grid = new THREE.GridHelper(16, 32, 0x7a8c2a, 0x252b12);
+  const grid = new THREE.GridHelper(16, 32, 0xa9bbd3, 0xcfdae7);
   grid.position.y = -2.1;
   grid.material.transparent = true;
-  grid.material.opacity = 0.5;
+  grid.material.opacity = 0.9;
   scene.add(grid);
   // glowing floor rings under the arm
-  const floorRings = [[0.9, 0xd4ee6a, 0.55], [1.35, 0xd4ee6a, 0.22], [2.1, 0x4aa8ff, 0.12]].map(([r, color, opacity]) => {
+  const floorRings = [[0.9, 0x1f6feb, 0.45], [1.35, 0x1f6feb, 0.2], [2.1, 0x4d8dff, 0.14]].map(([r, color, opacity]) => {
     const ring = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.025, 96),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.NormalBlending, depthWrite: false, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = -2.08;
     ring.userData.base = opacity;
@@ -89,8 +90,8 @@ export function createHand3D(container) {
   });
 
   // materials
-  const skin = new THREE.MeshStandardMaterial({ color: 0xdfe1cf, roughness: 0.42, metalness: 0.08, transparent: true });
-  const armMat = new THREE.MeshStandardMaterial({ color: 0xc9ccb6, roughness: 0.5, metalness: 0.05 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xf7f9fc, roughness: 0.35, metalness: 0.05, transparent: true });
+  const armMat = new THREE.MeshStandardMaterial({ color: 0xe6ecf4, roughness: 0.45, metalness: 0.05 });
   const wire = new THREE.MeshBasicMaterial({ color: OLIVE_BRIGHT, wireframe: true, transparent: true, opacity: 0.07, depthWrite: false });
   const sphereGeo = new THREE.SphereGeometry(1, 18, 14);
 
@@ -152,7 +153,7 @@ export function createHand3D(container) {
   fingers.thumb = buildFinger(THUMB, thumbBase);
 
   // signal pulses + tendon lines (wrist -> fingertip)
-  const pulseMat = new THREE.MeshBasicMaterial({ color: OLIVE_BRIGHT, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  const pulseMat = new THREE.MeshBasicMaterial({ color: OLIVE_BRIGHT, transparent: true, blending: THREE.NormalBlending, depthWrite: false });
   const lineMat = new THREE.LineBasicMaterial({ color: OLIVE_BRIGHT, transparent: true, opacity: 0, depthWrite: false });
   const wristLocal = new THREE.Vector3(0, 0.12, 0.2);
   const paths = {};
@@ -197,7 +198,7 @@ export function createHand3D(container) {
   const pGeo = new THREE.BufferGeometry();
   pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
   const particles = new THREE.Points(pGeo, new THREE.PointsMaterial({
-    color: OLIVE_BRIGHT, size: 0.035, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false,
+    color: OLIVE_BRIGHT, size: 0.035, transparent: true, opacity: 0.75, blending: THREE.NormalBlending, depthWrite: false,
   }));
   root.add(particles);
 
@@ -327,10 +328,10 @@ export function createHand3D(container) {
     });
 
     // gate glow: green while moving, red when blocked
-    emissiveTarget.setHex(gate === "open" ? OLIVE : gate === "blocked" ? RED : 0x000000);
+    emissiveTarget.setHex(gate === "open" ? GOOD : gate === "blocked" ? RED : 0x000000);
     skin.emissive.lerp(emissiveTarget, Math.min(1, dt * 6));
     skin.emissiveIntensity = 0.16;
-    glow.color.copy(gate === "blocked" ? new THREE.Color(RED) : new THREE.Color(OLIVE));
+    glow.color.copy(gate === "blocked" ? new THREE.Color(RED) : new THREE.Color(GOOD));
     glow.intensity += ((gate ? 6 : 0) - glow.intensity) * Math.min(1, dt * 5);
 
     controls.update();
