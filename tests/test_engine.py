@@ -180,3 +180,30 @@ def test_listener_exception_does_not_break_step():
     for _ in range(600):
         e.step()
     assert len(e.new_events) > 0
+
+
+def test_set_control_validates_and_reports():
+    import pytest
+    e = _engine()
+    e.set_control("intent", "wave")
+    s = e.state()
+    assert s["control_mode"] == "intent" and s["grip"] == "wave"
+    with pytest.raises(ValueError):
+        e.set_control("telepathy")
+    with pytest.raises(ValueError):
+        e.set_control("intent", "jazz-hands")
+
+
+def test_intent_only_moves_hand_without_vision():
+    from neurogrip.vision import VisionResult
+
+    class NoVision(MockVision):
+        def latest(self, t_ms=None):
+            return VisionResult(None, [])
+    e = Engine(MockSource(), NoVision(), MemoryStore())
+    e.set_control("intent", "fist")
+    for _ in range(400):
+        e.step()
+    assert max(max(a) for a in [e.state()["angles"]]) >= 0  # state ok
+    closes = [c for c in e.source.sent if c.startswith("A,") and c != "A,0,0,0,0,0\n"]
+    assert closes, "robot never moved with intent only"

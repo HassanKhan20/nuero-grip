@@ -12,7 +12,7 @@ from typing import Callable
 import numpy as np
 
 from .clinical import analyze_tapping, cv_tremor
-from .gate import THRESHOLDS, Gate
+from .gate import CONTROL_MODES, GRIPS, THRESHOLDS, Gate
 from .intent import IntentDetector
 from .metrics import SessionMetrics
 from .protocol import fmt_buzzer, fmt_led, fmt_servo
@@ -170,6 +170,7 @@ class Engine:
             return {**self.metrics.snapshot(), **self._live, "mode": self.mode, "patient_id": self.patient_id,
                     "sensors_ok": time.monotonic() - self._last_frame_at < SENSOR_TIMEOUT_S,
                     "source_kind": self.kind,
+                    "control_mode": self.gate.control, "grip": self.gate.grip,
                     "camera_ok": getattr(self.vision, "available", True),
                     "intent_held": self.control.held, "intent_auto": self.control.auto,
                     "cue_pending": self._cue_at_ms is not None,
@@ -196,6 +197,17 @@ class Engine:
             self._tap_start_ms = self._t_ms
             self._tap_duration_ms = int(duration_s * 1000)
             self._tap_samples = []
+
+    def set_control(self, mode: str, grip: str | None = None) -> None:
+        """mirror = copy the healthy hand (camera); intent = intent strength alone drives a grip."""
+        if mode not in CONTROL_MODES:
+            raise ValueError(f"control mode must be one of {CONTROL_MODES}")
+        if grip is not None and grip not in GRIPS:
+            raise ValueError(f"grip must be one of {GRIPS}")
+        with self._lock:
+            self.gate.control = mode
+            if grip is not None:
+                self.gate.grip = grip
 
     def set_mode(self, mode: str) -> None:
         if mode not in MODES:
@@ -238,7 +250,10 @@ def make_engine() -> Engine:
     camera = int(os.environ.get("NG_CAMERA", "0"))
     if kind == "mock":
         tremor = float(os.environ.get("NG_MOCK_TREMOR", "4.5"))
-        return Engine(MockSource(tremor_hz=tremor, realtime=True), MockVision(tremor_hz=tremor), store, kind="mock")
-    if kind == "camera":
-        return Engine(MockSource(control=IntentControl(), realtime=True), CameraVision(camera), store, kind="camera")
-    return Engine(SerialSource(os.environ["NG_SERIAL_PORT"]), CameraVision(camera), store, kind="hardware")
+        engine = Engine(MockSource(tremor_hz=tremor, realtime=True), MockVision(tremor_hz=tremor), store, kind="mock")
+    elif kind == "camera":
+        engine = Engine(MockSource(control=IntentControl(), realtime=True), CameraVision(camera), store, kind="camera")
+    else:
+        engine = Engine(SerialSource(os.environ["NG_SERIAL_PORT"]), CameraVision(camera), store, kind="hardware")
+    engine.set_control(os.environ.get("NG_CONTROL", "mirror"), os.environ.get("NG_GRIP", "fist"))
+    return engine

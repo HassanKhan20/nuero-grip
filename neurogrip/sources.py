@@ -8,6 +8,8 @@ from .protocol import SensorFrame, parse_sensor_line
 
 FRAME_MS = 20  # 50 Hz
 RECONNECT_DELAY_S = 1.0
+MOCK_EFFORT_DROP = 0.36   # simulated touch change at full effort (fraction of baseline)
+MOCK_RAMP_PER_S = 0.3     # how fast simulated effort builds/fades: ~1.2 s to full
 log = logging.getLogger(__name__)
 
 
@@ -32,13 +34,19 @@ class MockSource:
         self.control = control
         self.realtime = realtime
         self._t0 = time.monotonic()
+        self._drop = 0.0
         self.ms = 0
         self.sent: list[str] = []
 
     def read(self) -> SensorFrame:
+        prev = self.ms
         self.ms = int((time.monotonic() - self._t0) * 1000) if self.realtime else self.ms + FRAME_MS
         intent = self.control.active(self.ms) if self.control else (self.ms % 6000) >= 3000
-        base = 280 if intent else 400
+        # the touch signal ramps like a real muscle effort instead of snapping on/off
+        target = MOCK_EFFORT_DROP if intent else 0.0
+        step = MOCK_RAMP_PER_S * max(0, self.ms - prev) / 1000
+        self._drop += max(-step, min(step, target - self._drop))
+        base = round(400 * (1 - self._drop))
         temple = base + self.rng.randint(-3, 3)
         forearm = base + self.rng.randint(-3, 3)
         t = self.ms / 1000

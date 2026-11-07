@@ -99,6 +99,17 @@ def create_app(engine, start: bool = True):
         engine.start_tapping_test(max(3.0, min(30.0, float(seconds))))
         return jsonify(ok=True)
 
+    @app.post("/api/control")
+    @login_required
+    def api_control():
+        body = request.get_json(silent=True) or {}
+        try:
+            engine.set_control(body.get("mode"), body.get("grip"))
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
+        s = engine.state()
+        return jsonify(control_mode=s["control_mode"], grip=s["grip"])
+
     @app.post("/api/intent")
     @login_required
     def api_intent():

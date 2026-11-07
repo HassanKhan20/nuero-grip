@@ -86,3 +86,10 @@ def test_tapping_requires_therapist(client):
 def test_state_has_source_kind(client):
     _login(client, "therapist")
     assert client.get("/api/state").get_json()["source_kind"] == "mock"
+
+
+def test_control_endpoint(client):
+    _login(client, "patient")
+    r = client.post("/api/control", json={"mode": "intent", "grip": "pinch"})
+    assert r.status_code == 200 and r.get_json() == {"control_mode": "intent", "grip": "pinch"}
+    assert client.post("/api/control", json={"mode": "nope"}).status_code == 400

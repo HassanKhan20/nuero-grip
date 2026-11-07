@@ -44,7 +44,7 @@ def test_intent_control_drives_mock_source():
     src, d = MockSource(control=ctl), IntentDetector()
     assert not any(d.update(src.read()).active for _ in range(400))
     ctl.held = True
-    assert d.update(src.read()).active
+    assert any(d.update(src.read()).active for _ in range(50))
     ctl.held, ctl.auto = False, True
     states = [d.update(src.read()).active for _ in range(400)]
     assert any(states) and not all(states)
@@ -56,3 +56,16 @@ def test_realtime_clock():
     a = src.read().ms
     time.sleep(0.05)
     assert src.read().ms - a >= 40
+
+
+def test_hold_ramps_intent_up_gradually():
+    from neurogrip.sources import IntentControl
+    ctl = IntentControl()
+    src, d = MockSource(control=ctl), IntentDetector()
+    for _ in range(150):
+        d.update(src.read())
+    ctl.held = True
+    strengths = [d.update(src.read()).strength for _ in range(80)]
+    assert strengths[0] < 0.3          # not instant: the grip builds up
+    assert strengths[10] < strengths[30] < strengths[-1]
+    assert strengths[-1] == 1.0

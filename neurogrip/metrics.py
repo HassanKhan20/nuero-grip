@@ -39,7 +39,10 @@ class SessionMetrics:
 
     def update(self, t_ms: int, intent: IntentState, vision: VisionResult, gate: GateOutput) -> list[dict]:
         new: list[dict] = []
-        peak = max(vision.curls.values()) if vision.curls else None
+        if gate.drive is not None:  # intent-only control: the robot's own closure is the movement
+            peak = gate.drive
+        else:
+            peak = max(vision.curls.values()) if vision.curls else None
 
         if gate.target_set:
             self._target_frames += 1

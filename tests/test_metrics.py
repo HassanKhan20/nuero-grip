@@ -73,3 +73,11 @@ def test_grip_latency_response():
     ev = m.update(1400, IDLE, _v(0.8), _g(False))
     assert {"t": 1400, "type": "latency", "ms": 400} in ev
     assert m.snapshot()["latencies"] == [400] and not m.trial_active
+
+
+def test_rep_counted_from_robot_drive_in_intent_mode():
+    m = SessionMetrics()
+    no_hand = VisionResult(None, [])
+    for i, d in enumerate([0.0, 0.7, 0.2]):
+        m.update(i * 20, ACTIVE, no_hand, GateOutput(True, True, (0,) * 5, "G", 0, drive=d))
+    assert m.snapshot()["reps"] == 1
