@@ -11,18 +11,33 @@ RECONNECT_DELAY_S = 1.0
 log = logging.getLogger(__name__)
 
 
-class MockSource:
-    """Synthetic headband + wristband. Alternates 3 s rest / 3 s intent."""
+class IntentControl:
+    """Stand-in for the headband when there is no hardware: UI hold button / spacebar, or auto-cycle."""
 
-    def __init__(self, tremor_hz: float = 0.0, seed: int = 0):
+    def __init__(self):
+        self.held = False
+        self.auto = False
+
+    def active(self, ms: int) -> bool:
+        return self.held or (self.auto and (ms % 6000) >= 3000)
+
+
+class MockSource:
+    """Synthetic headband + wristband. Intent alternates 3 s rest / 3 s on, or follows an IntentControl."""
+
+    def __init__(self, tremor_hz: float = 0.0, seed: int = 0, control: IntentControl | None = None,
+                 realtime: bool = False):
         self.tremor_hz = tremor_hz
         self.rng = random.Random(seed)
+        self.control = control
+        self.realtime = realtime
+        self._t0 = time.monotonic()
         self.ms = 0
         self.sent: list[str] = []
 
     def read(self) -> SensorFrame:
-        self.ms += FRAME_MS
-        intent = (self.ms % 6000) >= 3000
+        self.ms = int((time.monotonic() - self._t0) * 1000) if self.realtime else self.ms + FRAME_MS
+        intent = self.control.active(self.ms) if self.control else (self.ms % 6000) >= 3000
         base = 280 if intent else 400
         temple = base + self.rng.randint(-3, 3)
         forearm = base + self.rng.randint(-3, 3)

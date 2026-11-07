@@ -60,3 +60,17 @@ def test_camera_result_goes_stale():
     assert cam.latest().curls is not None
     cam._result_at = time.monotonic() - 1
     assert cam.latest().curls is None
+
+
+def test_pinch_distance_open_vs_closed():
+    from neurogrip.vision import pinch_distance
+    assert pinch_distance(OPEN) > 1.0 and pinch_distance(FIST) < 0.6
+
+
+def test_mock_vision_wrist_tremor_and_frames():
+    v = MockVision(tremor_hz=5)
+    r = v.latest(t_ms=1000)
+    assert r.frame_id == 1000 // 33 and r.t == 1.0
+    assert r.wrist is not None and r.pinch is not None
+    xs = [v.latest(t_ms=t).wrist[0] for t in range(0, 1000, 33)]
+    assert max(xs) - min(xs) > 0.005

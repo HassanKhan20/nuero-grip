@@ -36,3 +36,23 @@ def test_mock_source_records_sent_commands():
     src = MockSource()
     src.send("L,G\n")
     assert src.sent == ["L,G\n"]
+
+
+def test_intent_control_drives_mock_source():
+    from neurogrip.sources import IntentControl
+    ctl = IntentControl()
+    src, d = MockSource(control=ctl), IntentDetector()
+    assert not any(d.update(src.read()).active for _ in range(400))
+    ctl.held = True
+    assert d.update(src.read()).active
+    ctl.held, ctl.auto = False, True
+    states = [d.update(src.read()).active for _ in range(400)]
+    assert any(states) and not all(states)
+
+
+def test_realtime_clock():
+    import time
+    src = MockSource(realtime=True)
+    a = src.read().ms
+    time.sleep(0.05)
+    assert src.read().ms - a >= 40
