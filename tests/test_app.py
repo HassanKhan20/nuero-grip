@@ -60,3 +60,29 @@ def test_dashboard_renders_for_both_roles(client):
     _login(client, "patient")
     page = client.get("/").data
     assert b"Explain my progress" in page and b"Run AI agent" not in page
+
+
+def test_intent_hold_sets_control(client):
+    _login(client, "patient")
+    assert client.post("/api/intent", json={"held": True}).get_json()["held"] is True
+    assert client.post("/api/intent/auto", json={"auto": True}).get_json()["auto"] is True
+    s = client.get("/api/state").get_json()
+    assert s["intent_held"] and s["intent_auto"]
+
+
+def test_video_feed_404_without_camera(client):
+    _login(client, "patient")
+    assert client.get("/video_feed").status_code == 404
+
+
+def test_tapping_requires_therapist(client):
+    _login(client, "patient")
+    assert client.post("/api/tapping").status_code == 403
+    client.get("/logout")
+    _login(client, "therapist")
+    assert client.post("/api/tapping", json={"seconds": 5}).get_json()["ok"] is True
+
+
+def test_state_has_source_kind(client):
+    _login(client, "therapist")
+    assert client.get("/api/state").get_json()["source_kind"] == "mock"

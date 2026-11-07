@@ -1,11 +1,12 @@
-"""NeuroGrip dashboard: Flask + Socket.IO. Run: python app.py (set NG_MOCK=1 for no hardware)."""
+"""NeuroGrip dashboard: Flask + Socket.IO. Run: python app.py  (NG_MODE=camera default | mock | hardware)."""
 import logging
 import os
 import secrets
 import threading
+import time
 from functools import wraps
 
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from flask_socketio import SocketIO
 
 from neurogrip.agent import ToolBox, make_nvidia_client, nemotron_model, run_agent
@@ -91,6 +92,45 @@ def create_app(engine, start: bool = True):
         engine.cue_latency()
         return jsonify(ok=True)
 
+    @app.post("/api/tapping")
+    @therapist_only
+    def api_tapping():
+        seconds = (request.get_json(silent=True) or {}).get("seconds", 10)
+        engine.start_tapping_test(max(3.0, min(30.0, float(seconds))))
+        return jsonify(ok=True)
+
+    @app.post("/api/intent")
+    @login_required
+    def api_intent():
+        if engine.kind == "hardware":
+            return jsonify(error="intent comes from the headband in hardware mode"), 400
+        engine.control.held = bool((request.get_json(silent=True) or {}).get("held"))
+        return jsonify(held=engine.control.held)
+
+    @app.post("/api/intent/auto")
+    @login_required
+    def api_intent_auto():
+        if engine.kind == "hardware":
+            return jsonify(error="intent comes from the headband in hardware mode"), 400
+        engine.control.auto = bool((request.get_json(silent=True) or {}).get("auto"))
+        return jsonify(auto=engine.control.auto)
+
+    @app.get("/video_feed")
+    @login_required
+    def video_feed():
+        if engine.vision.jpeg() is None and not getattr(engine.vision, "available", False):
+            return jsonify(error="no camera in this mode"), 404
+
+        def frames():
+            boundary = b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+            while True:
+                jpg = engine.vision.jpeg()
+                if jpg:
+                    yield boundary + jpg + b"\r\n"
+                time.sleep(1 / 15)
+
+        return Response(frames(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
     @app.post("/api/session/end")
     @therapist_only
     def api_end_session():
@@ -144,9 +184,12 @@ def create_app(engine, start: bool = True):
     def broadcast():
         while True:
             socketio.sleep(0.1)
-            socketio.emit("state", engine.state())
-            while engine.new_events:
-                socketio.emit("event", engine.new_events.popleft())
+            try:
+                socketio.emit("state", engine.state())
+            except Exception:
+                log.exception("state broadcast failed")
+
+    engine.listeners.append(lambda e: socketio.emit("event", e))  # events (cue, incidents) go out instantly
 
     if start:
         stop = threading.Event()
