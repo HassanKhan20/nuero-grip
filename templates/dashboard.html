@@ -3,187 +3,164 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NeuroGrip Command Center</title>
+  <title>NeuroGrip</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <script type="importmap">
+    {"imports": {"three": "{{ url_for('static', filename='vendor/three.module.min.js') }}",
+                 "three/addons/": "{{ url_for('static', filename='vendor/') }}"}}
+  </script>
+  <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
 </head>
 <body data-role="{{ role }}">
-<header class="topbar">
-  <div class="brand">
-    <span class="logo" aria-hidden="true">◉</span>
-    <div>
-      <h1 id="mode-title">Stroke Recovery</h1>
-      <p class="muted small"><span id="source-badge" class="badge">—</span> <span id="conn">connecting…</span></p>
-    </div>
-  </div>
-  <div class="topbar-right">
-    <label class="muted small">Condition
-      <select id="mode-select">
-        {% for m in modes %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
-      </select>
-    </label>
-    <span class="role-badge">{{ role }}</span>
-    <a href="/logout">Log out</a>
+<header class="top">
+  <div class="brand"><span class="mark" aria-hidden="true"></span>NeuroGrip</div>
+  <nav class="conditions" aria-label="Condition">
+    {% for key, label in [('stroke', 'Stroke'), ('parkinsons', "Parkinson's"), ('phantom', 'Phantom limb'), ('cp', 'Cerebral palsy'), ('cognitive', 'Cognitive')] %}
+    <button type="button" data-mode="{{ key }}">{{ label }}</button>
+    {% endfor %}
+  </nav>
+  <div class="who">
+    <span id="conn-dot" class="dot" aria-hidden="true"></span>
+    <span id="source-label">Connecting</span>
+    <span class="sep">·</span><span class="role">{{ role }}</span>
+    <a href="/logout">Sign out</a>
   </div>
 </header>
 
-<main class="grid">
-  <!-- HERO: healthy hand (camera) → gate → robotic hand -->
-  <section class="tile hero-cam" data-metric="grip">
-    <h2>Healthy hand <span class="muted">camera</span></h2>
-    <div class="cam-frame" id="cam-frame">
-      <div id="cam-off-note" class="cam-off-note" hidden><b>Camera not used</b><span>Intent-only control: the hand moves from motor intent alone</span></div>
-      <img id="cam" alt="Live camera with hand skeleton" hidden>
-      <div id="cam-placeholder" class="cam-placeholder">
-        <p id="cam-msg">Camera feed appears in camera mode</p>
-        <p class="muted small">Run with <code>NG_MODE=camera</code></p>
+<main class="page">
+  <section class="stage">
+    <div class="viewport">
+      <div id="hand3d" class="hand3d"></div>
+      <div class="vp-top">
+        <h1 id="cond-title">Stroke recovery</h1>
+        <span id="gate-status" class="pill">—</span>
       </div>
+      <p id="cond-note" class="vp-note"></p>
+      <figure id="pip" class="pip" hidden><img id="cam" alt="Camera view of the healthy hand"></figure>
+      <p class="vp-hint">Drag to rotate</p>
     </div>
+
+    <aside class="card control">
+      <div class="seg" role="group" aria-label="Control">
+        <button type="button" data-control="mirror">Mirror camera</button>
+        <button type="button" data-control="intent">Intent only</button>
+      </div>
+      <div id="grip-row" class="seg seg-sm" role="group" aria-label="Grip" hidden>
+        {% for g in ['fist', 'pinch', 'point', 'wave'] %}<button type="button" data-grip="{{ g }}">{{ g|capitalize }}</button>{% endfor %}
+      </div>
+
+      <div class="intent">
+        <div class="intent-head"><span>Intent</span><b id="intent-val">0.00</b></div>
+        <div class="spark-wrap">
+          <svg id="wave" class="wave" viewBox="0 0 200 40" preserveAspectRatio="none" aria-label="Intent, last 10 seconds">
+            <line x1="0" y1="20" x2="200" y2="20" class="threshold"/>
+            <polyline id="wave-line" points=""/><circle id="wave-dot" r="2.5" hidden/>
+          </svg>
+          <div id="wave-tip" class="tip" hidden></div>
+        </div>
+        <p id="intent-label" class="muted small">Calibrating</p>
+      </div>
+
+      <div id="sim-intent">
+        <button type="button" id="btn-hold" class="primary hold">Hold to try</button>
+        <p class="muted small center">or hold <kbd>Space</kbd></p>
+      </div>
+      <p id="hw-intent" class="muted small" hidden>Headband connected</p>
+
+      <details class="more">
+        <summary>Sensors and calibration</summary>
+        <div class="pads">
+          <div><span>Temple</span><b id="pad-temple">—</b><small id="pad-temple-d"></small></div>
+          <div><span>Forearm</span><b id="pad-forearm">—</b><small id="pad-forearm-d"></small></div>
+        </div>
+        <div class="row"><button type="button" id="btn-cal" class="secondary">Calibrate</button><span id="cal-status" class="muted small"></span></div>
+        <label class="check"><input type="checkbox" id="auto-intent"> Auto-cycle intent</label>
+        {% if role == 'therapist' %}
+        <div class="row between"><span>Difficulty</span>
+          <div class="stepper"><button type="button" id="diff-down" aria-label="Easier">−</button><b id="difficulty">3</b><button type="button" id="diff-up" aria-label="Harder">+</button></div>
+        </div>
+        {% endif %}
+      </details>
+    </aside>
   </section>
 
-  <section class="tile hero-robot" data-metric="grip">
-    <h2>Robotic hand <span id="gate-status" class="pill">—</span></h2>
-    <div class="control-row">
-      <div class="seg" role="group" aria-label="Control mode">
-        <button type="button" class="seg-btn" data-control="mirror">Mirror camera</button>
-        <button type="button" class="seg-btn" data-control="intent">Intent only</button>
-      </div>
-      <div id="grip-row" class="seg" role="group" aria-label="Grip shape" hidden>
-        {% for g in ['fist', 'pinch', 'point', 'wave'] %}<button type="button" class="seg-btn" data-grip="{{ g }}">{{ g|capitalize }}</button>{% endfor %}
-      </div>
-    </div>
-    <div id="hand" class="hand-wrap"></div>
-    <div class="bars">
-      {% for f in ['thumb', 'index', 'middle', 'ring', 'pinky'] %}
-      <div class="bar"><span>{{ f|capitalize }}</span><div class="track"><div id="bar-{{ f }}" class="fill"></div></div><b id="ang-{{ f }}">0°</b></div>
-      {% endfor %}
-    </div>
+  <section aria-labelledby="stats-title">
+    {% if role == 'therapist' %}<h2 id="stats-title" class="section-title">Motor function status</h2>{% else %}<h2 id="stats-title" class="section-title">Today</h2>{% endif %}
+    <div id="stats" class="stats"></div>
   </section>
-
-  <section class="tile hero-intent" data-metric="intent">
-    <h2>Motor intent</h2>
-    <div class="bar intent"><span>Strength</span><div class="track"><div id="bar-intent" class="fill intent-fill"></div></div><b id="intent-val">0.00</b></div>
-    <div class="spark-wrap">
-      <svg id="wave" class="wave" viewBox="0 0 200 40" preserveAspectRatio="none" aria-label="Intent strength over the last 10 seconds">
-        <line x1="0" y1="39" x2="200" y2="39" class="baseline"/>
-        <line x1="0" y1="20" x2="200" y2="20" class="threshold"/>
-        <polyline id="wave-line" points=""/><circle id="wave-dot" r="2.5" hidden/>
-      </svg>
-      <div id="wave-tip" class="tip" hidden></div>
-    </div>
-    <p class="muted small wave-caption">Intent signal, last 10 s · dashed line = threshold</p>
-    <p id="intent-label" class="intent-label muted">Calibrating…</p>
-    <div class="pads">
-      <div><span class="muted small">Temple pad</span><b id="pad-temple">—</b><span class="muted small" id="pad-temple-d"></span></div>
-      <div><span class="muted small">Forearm pad</span><b id="pad-forearm">—</b><span class="muted small" id="pad-forearm-d"></span></div>
-    </div>
-    <div class="row cal-row"><button type="button" id="btn-cal" class="secondary">Calibrate to this person</button><span id="cal-status" class="muted small"></span></div>
-    <div id="sim-intent">
-      <button id="btn-hold" class="hold">Hold to try</button>
-      <p class="muted small">or hold <kbd>Space</kbd>. This stands in for the headband.</p>
-      <label class="switch"><input type="checkbox" id="auto-intent"> Auto (3 s try / 3 s rest)</label>
-    </div>
-    <p id="hw-intent" class="muted small" hidden>Intent comes from the capacitive headband (temple + forearm).</p>
-    {% if role == 'therapist' %}
-    <div class="difficulty" data-metric="difficulty">
-      <span class="muted small">Difficulty</span>
-      <div class="stepper"><button id="diff-down" aria-label="Easier">−</button><span class="big" id="difficulty">3</span><button id="diff-up" aria-label="Harder">+</button></div>
-    </div>
-    {% endif %}
-  </section>
-
-  <!-- METRICS -->
-  <section class="tile" data-metric="reps"><h2>Reps</h2><div class="big" id="reps">0</div><p class="muted small">full grip → release cycles</p></section>
-  <section class="tile" data-metric="activation">
-    <h2>Gate activation</h2><div class="big"><span id="activation">0</span><small>%</small></div>
-    <div class="spark-wrap">
-      <svg id="spark" class="spark" viewBox="0 0 120 32" preserveAspectRatio="none" aria-label="Gate activation over the last minute">
-        <line x1="0" y1="31" x2="120" y2="31" class="baseline"/><polyline id="spark-line" points=""/><circle id="spark-dot" r="2.5" hidden/>
-      </svg>
-      <div id="spark-tip" class="tip" hidden></div>
-    </div>
-    <p class="muted small">% of tries strong enough to move the hand</p>
-  </section>
-  <section class="tile" data-metric="tremor"><h2>Tremor</h2><div class="big"><span id="tremor">0.0</span><small> Hz</small></div>
-    <p class="muted small"><span id="tremor-src">—</span> · amplitude <span id="tremor-amp">0</span></p></section>
-  <section class="tile" data-metric="steadiness"><h2>Steadiness</h2><div class="big"><span id="steadiness">100</span><small>/100</small></div></section>
-  <section class="tile" data-metric="latency"><h2>Reaction time</h2><div class="big"><span id="latency">—</span><small> ms</small></div>
-    <p class="muted small">mean of <span id="latency-trials">0</span> trials</p></section>
-  <section class="tile" data-metric="compensation"><h2>Compensation</h2><div class="big" id="comp-count">0</div><p class="muted small">shoulder hike / trunk lean events</p></section>
 
   {% if role == 'therapist' %}
-  <!-- CLINICAL TESTS -->
-  <section class="tile half" data-metric="parkinsons">
-    <h2>Parkinson's: finger-tap test</h2>
-    <p class="muted small">10 s of thumb–index tapping, scored from the camera (MDS-UPDRS 3.4 style). Screening indicator, not a diagnosis.</p>
-    <div class="row"><button id="btn-tap">Start finger-tap test</button></div>
+  <section id="test-tap" class="card" hidden>
+    <div class="card-head"><h2>Finger-tap test</h2><button type="button" id="btn-tap" class="primary">Start</button></div>
+    <p class="muted small">10 seconds of thumb–index tapping. Screening only.</p>
     <dl id="tap-results" class="results" hidden>
       <div><dt>Taps</dt><dd id="tap-taps">—</dd></div>
-      <div><dt>Rate</dt><dd><span id="tap-rate">—</span> Hz</dd></div>
-      <div><dt>Amplitude decrement</dt><dd><span id="tap-dec">—</span>%</dd></div>
-      <div><dt>Rhythm variability</dt><dd id="tap-cv">—</dd></div>
+      <div><dt>Rate</dt><dd id="tap-rate">—</dd></div>
+      <div><dt>Decrement</dt><dd id="tap-dec">—</dd></div>
+      <div><dt>Rhythm</dt><dd id="tap-cv">—</dd></div>
     </dl>
     <p id="tap-flag" class="flag" hidden></p>
   </section>
 
-  <section class="tile half" data-metric="cognitive">
-    <h2>Cognitive: reaction test</h2>
-    <p class="muted small">A cue appears after a random 1–3 s and the timer runs until the patient grips. Slowing across sessions is a screening signal.</p>
-    <div class="row"><button id="btn-cue">Start reaction test</button><span id="cue-status" class="muted small"></span></div>
-    <div class="trials-wrap">
+  <section id="test-reaction" class="card" hidden>
+    <div class="card-head"><h2>Reaction test</h2><button type="button" id="btn-cue" class="primary">Start</button></div>
+    <p class="muted small"><span id="cue-status">Cue appears after 1–3 s.</span> Screening only.</p>
+    <div id="trials-wrap" class="trials-wrap" hidden>
       <svg id="trials" class="trials" viewBox="0 0 200 60" preserveAspectRatio="none" aria-label="Last 10 reaction times"></svg>
       <div id="trials-tip" class="tip" hidden></div>
     </div>
-    <p class="muted small">Last 10 trials (ms)</p>
   </section>
 
-  <section class="tile wide">
-    <h2>Incident log <span class="muted small">timestamped, live</span></h2>
-    <ul id="event-log" class="log"></ul>
-  </section>
-
-  <section class="tile wide">
-    <h2>Nemotron session agent</h2>
-    <div class="row"><button id="btn-agent">Run AI agent</button><button id="btn-end" class="secondary">End &amp; save session</button><span id="agent-status" class="muted"></span></div>
-    <div id="agent-out" hidden>
-      <div class="agent-cols">
-        <div><h3>Clinical summary</h3><p id="agent-summary"></p><h3>Next session plan</h3><p id="agent-plan"></p></div>
-        <div><h3>Agent trace <span class="muted small">tool calls, in order</span></h3><ol id="agent-trace" class="trace"></ol></div>
+  <div class="duo">
+    <section class="card">
+      <div class="card-head"><h2>Session review</h2><button type="button" id="btn-agent" class="primary">Review session</button></div>
+      <p id="agent-status" class="muted small"></p>
+      <div id="agent-out" hidden>
+        <p id="agent-summary" class="lead"></p>
+        <p class="muted small">Next session</p>
+        <p id="agent-plan"></p>
+        <details class="more"><summary id="trace-summary">Agent steps</summary><ol id="agent-trace" class="trace"></ol></details>
       </div>
-    </div>
-  </section>
+      <button type="button" id="btn-end" class="link">End session</button>
+    </section>
 
-  <section class="tile wide">
-    <h2>Caseload triage <span class="muted small">AI-flagged</span></h2>
-    <div class="row"><button id="btn-triage">Run AI triage</button><span id="triage-status" class="muted"></span></div>
+    <section class="card">
+      <div class="card-head"><h2>Activity</h2></div>
+      <ul id="event-log" class="log"></ul>
+      <details id="log-more" class="more" hidden><summary>Show all</summary><ul id="event-log-all" class="log"></ul></details>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="card-head"><h2>Caseload</h2><button type="button" id="btn-triage" class="primary">Rank patients</button></div>
+    <p id="triage-status" class="muted small"></p>
     <div class="table-scroll">
       <table id="triage-table" class="triage" hidden>
-        <thead><tr><th>Urgency</th><th>Patient</th><th>Condition</th><th>Last seen</th><th>AI reason</th></tr></thead>
+        <thead><tr><th>Priority</th><th>Patient</th><th>Condition</th><th>Trend</th><th>Last seen</th><th>Reason</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
   </section>
   {% else %}
-  <section class="tile wide">
-    <h2>How am I doing?</h2>
-    <div class="row"><button id="btn-explain">Explain my progress</button><span id="explain-status" class="muted"></span></div>
-    <p id="explain-text" class="explain"></p>
+  <section class="card">
+    <div class="card-head"><h2>Your progress</h2><button type="button" id="btn-explain" class="primary">Explain my progress</button></div>
+    <p id="explain-status" class="muted small"></p>
+    <p id="explain-text" class="lead"></p>
   </section>
   {% endif %}
 </main>
 
-<!-- Full-screen prompts the patient responds to -->
-<div id="cue-overlay" class="overlay cue" hidden><div><p class="overlay-big">SQUEEZE!</p><p>Close your hand now</p></div></div>
+<div id="cue-overlay" class="overlay cue" hidden><p class="overlay-big">Squeeze</p></div>
 <div id="tap-overlay" class="overlay tap" hidden><div>
-  <p class="overlay-big"><span id="tap-left">10</span>s</p>
-  <p>Tap your thumb and index finger together, as fast and as wide as you can</p>
+  <p class="overlay-big"><span id="tap-left">10</span></p>
+  <p>Tap thumb and index finger, fast and wide</p>
 </div></div>
 <div id="cal-overlay" class="overlay cal" hidden><div>
-  <p class="overlay-big" id="cal-word">RELAX</p>
-  <p id="cal-help">Sit still and let your hand go loose</p>
-  <p class="overlay-count"><span id="cal-left">2</span>s</p>
+  <p class="overlay-big" id="cal-word">Relax</p>
+  <p id="cal-help"></p>
+  <p class="overlay-count"><span id="cal-left">2</span></p>
 </div></div>
-<div id="toast" class="toast" hidden></div>
+<div id="toast" class="toast" role="status" hidden></div>
 
 <script type="module" src="{{ url_for('static', filename='dashboard.js') }}"></script>
 </body>

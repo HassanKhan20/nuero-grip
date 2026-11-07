@@ -55,11 +55,11 @@ def test_therapist_sets_difficulty_and_mode(client):
 
 def test_dashboard_renders_for_both_roles(client):
     _login(client, "therapist")
-    assert b"Run AI agent" in client.get("/").data
+    assert b"Review session" in client.get("/").data
     client.get("/logout")
     _login(client, "patient")
     page = client.get("/").data
-    assert b"Explain my progress" in page and b"Run AI agent" not in page
+    assert b"Explain my progress" in page and b"Review session" not in page
 
 
 def test_intent_hold_sets_control(client):

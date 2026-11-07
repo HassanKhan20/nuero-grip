@@ -2,30 +2,61 @@ import { createHand } from "./hand.js";
 
 const $ = (id) => document.getElementById(id);
 const role = document.body.dataset.role;
-const FINGERS = ["thumb", "index", "middle", "ring", "pinky"];
+const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
 
-const MODE_INFO = {
-  stroke: { title: "Stroke Recovery", highlight: ["grip", "activation", "compensation", "intent"] },
-  parkinsons: { title: "Parkinson's Monitoring", highlight: ["tremor", "steadiness", "parkinsons"] },
-  phantom: { title: "Phantom Limb Mirror Therapy", highlight: ["grip", "activation", "reps"] },
-  cp: { title: "Pediatric Cerebral Palsy", highlight: ["grip", "reps", "compensation", "difficulty"] },
-  cognitive: { title: "Cognitive Decline Screening", highlight: ["latency", "cognitive"] },
+// ---------- conditions ----------
+const CONDITIONS = {
+  stroke: { title: "Stroke recovery", note: () => "Moves only while you try, with clean posture.",
+    stats: ["reps", "activation", "compensation", "difficulty"] },
+  parkinsons: { title: "Parkinson's", note: (s) => (s.tremor_hz > 0 ? `Tremor ${s.tremor_hz.toFixed(1)} Hz` : "No tremor detected"),
+    stats: ["tremor", "steadiness", "taprate", "tapdec"], test: "tap" },
+  phantom: { title: "Phantom limb", note: () => "Mirrored hand for mirror therapy.",
+    stats: ["reps", "activation", "compensation", "difficulty"] },
+  cp: { title: "Cerebral palsy", note: () => "Child-size hand. Joint color shows flexion.",
+    stats: ["reps", "activation", "compensation", "difficulty"] },
+  cognitive: { title: "Cognitive screening", note: () => "Squeeze when the screen flashes.",
+    stats: ["rtMean", "rtLast", "rtTrials", "rtTrend"], test: "reaction" },
+};
+
+const tapOk = (s) => s.tapping && !s.tapping.error;
+const STATS = {
+  reps: ["Reps", (s) => s.reps],
+  activation: ["Activation", (s) => `${s.activation_rate.toFixed(0)}%`],
+  compensation: ["Compensation", (s) => s.compensation_count],
+  difficulty: ["Difficulty", (s) => `${s.difficulty} / 5`],
+  tremor: ["Tremor", (s) => (s.tremor_hz > 0 ? `${s.tremor_hz.toFixed(1)} Hz` : "None")],
+  steadiness: ["Steadiness", (s) => `${s.steadiness.toFixed(0)} / 100`],
+  taprate: ["Tap rate", (s) => (tapOk(s) ? `${s.tapping.rate_hz.toFixed(1)} /s` : "—")],
+  tapdec: ["Tap decrement", (s) => (tapOk(s) ? `${s.tapping.decrement_pct.toFixed(0)}%` : "—")],
+  rtMean: ["Mean reaction", (s) => (s.latency_ms_mean != null ? `${s.latency_ms_mean} ms` : "—")],
+  rtLast: ["Last", (s) => (s.latencies?.length ? `${s.latencies.at(-1)} ms` : "—")],
+  rtTrials: ["Trials", (s) => s.latency_trials],
+  rtTrend: ["Trend", (s) => {
+    const l = s.latencies || [];
+    if (l.length < 4) return "—";
+    const k = Math.floor(l.length / 2);
+    const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+    const d = Math.round(avg(l.slice(k)) - avg(l.slice(0, k)));
+    return `${d > 0 ? "+" : ""}${d} ms`;
+  }],
 };
 
 const EVENT_LABELS = {
-  shoulder_hike: ["Shoulder hike (compensation)", "warn"],
-  trunk_lean: ["Trunk lean (compensation)", "warn"],
-  latency: ["Reaction time", "info"],
-  latency_miss: ["Reaction test missed (>3 s)", "warn"],
-  cue: ["Reaction cue shown", "info"],
-  tapping: ["Finger-tap test complete", "info"],
-  calibration_squeeze: ["Calibration: squeeze phase", "info"],
-  calibrated: ["Intent calibrated to wearer", "info"],
+  shoulder_hike: ["Shoulder hike", "warn"],
+  trunk_lean: ["Trunk lean", "warn"],
+  latency: ["Reaction", "info"],
+  latency_miss: ["Reaction missed", "warn"],
+  cue: ["Cue shown", "info"],
+  tapping: ["Tap test done", "info"],
+  calibration_squeeze: ["Calibration: squeeze", "info"],
+  calibrated: ["Calibrated", "info"],
   calibration_failed: ["Calibration failed", "warn"],
+  agent_alert: ["AI alert", "warn"],
 };
 
-const SOURCE_LABELS = { mock: "MOCK DATA", camera: "CAMERA MODE", hardware: "HARDWARE" };
+const SOURCE_LABELS = { mock: "Simulated", camera: "Camera", hardware: "Headband" };
 
+// ---------- helpers ----------
 async function api(path, method = "POST", body) {
   const res = await fetch(path, {
     method,
@@ -37,107 +68,97 @@ async function api(path, method = "POST", body) {
   return data;
 }
 
-const setText = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-const fmtClock = (ms) => {
-  const s = Math.floor(ms / 1000);
-  return `T+${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-};
-
 function toast(msg) {
   const t = $("toast");
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { t.hidden = true; }, 4000);
+  toast.timer = setTimeout(() => { t.hidden = true; }, 3500);
 }
 
-// ---------- audio cue (unlocked on first user gesture) ----------
+const fmtClock = (ms) => {
+  const s = Math.floor(ms / 1000);
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+};
+
 let audio = null;
 document.addEventListener("pointerdown", () => { audio ??= new AudioContext(); }, { once: true });
 function beep(hz = 1200, ms = 180) {
   if (!audio) return;
   const o = audio.createOscillator(), g = audio.createGain();
   o.frequency.value = hz;
-  g.gain.value = 0.15;
+  g.gain.value = 0.12;
   o.connect(g).connect(audio.destination);
   o.start();
   o.stop(audio.currentTime + ms / 1000);
 }
 
-// ---------- hero: camera + robotic hand ----------
-const hand = createHand($("hand"));
-let camStarted = false;
-function ensureCamera(s) {
-  const usesCamera = s.source_kind !== "mock" && s.camera_ok;
-  if (usesCamera && !camStarted) {
-    camStarted = true;
-    const img = $("cam");
-    img.onload = () => { img.hidden = false; $("cam-placeholder").hidden = true; };
-    img.onerror = () => { camStarted = false; };
-    img.src = "/video_feed";
-  }
-  if (s.source_kind === "mock") setText("cam-msg", "Mock mode: synthetic hand data, no camera");
-  else if (!s.camera_ok) setText("cam-msg", "Camera could not be opened. Check NG_CAMERA or close other apps using it");
+// ---------- hand: 3D when WebGL works, flat SVG otherwise ----------
+let hand = null;
+try {
+  const m = await import("./hand3d.js");
+  if (m.supportsWebGL()) hand = m.createHand3D($("hand3d"));
+} catch (err) {
+  console.warn("3D hand unavailable, using flat hand", err);
+}
+if (!hand) {
+  $("hand3d").classList.add("flat");
+  const flat = createHand($("hand3d"));
+  hand = { update: (s, g) => flat.update(s.angles, g) };
 }
 
 function gateState(s) {
   if (!s.sensors_ok) return ["Sensors offline", "bad", "blocked"];
   if (!s.calibrated) return ["Calibrating", "idle", ""];
-  if (s.compensation && s.compensation.length) return ["Blocked: fix posture", "bad", "blocked"];
+  if (s.compensation?.length) return ["Blocked: posture", "bad", "blocked"];
   if (s.control_mode === "intent") {
-    if (s.gate_open) return ["Moving by intent", "good", "open"];
-    if (Math.max(...s.angles) > 0) return ["Relaxed: opening", "idle", ""];
-    return ["Try to grip", "idle", ""];
+    if (s.gate_open) return ["Moving", "good", "open"];
+    if (Math.max(...s.angles) > 0) return ["Opening", "idle", ""];
+    return ["Waiting", "idle", ""];
   }
-  if (s.gate_open) return ["Moving with you", "good", "open"];
-  if (!s.curls) return ["Show your healthy hand", "idle", ""];
-  if (!s.intent_active) return ["Waiting for intent", "idle", ""];
+  if (s.gate_open) return ["Moving", "good", "open"];
+  if (!s.curls) return ["No hand in view", "idle", ""];
+  if (!s.intent_active) return ["Waiting", "idle", ""];
   return ["Holding", "idle", ""];
 }
 
-// ---------- mode ----------
+// ---------- condition + stats ----------
 let currentMode = null;
-function applyMode(mode) {
-  const info = MODE_INFO[mode] || MODE_INFO.stroke;
-  setText("mode-title", info.title);
-  $("mode-select").value = mode;
-  document.querySelectorAll("[data-metric]").forEach((el) => {
-    el.classList.toggle("highlight", info.highlight.includes(el.dataset.metric));
-  });
-  $("hand").classList.toggle("mirrored", mode === "phantom");
+function applyCondition(mode) {
+  const c = CONDITIONS[mode] || CONDITIONS.stroke;
+  setText("cond-title", c.title);
+  document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
+  const box = $("stats");
+  box.replaceChildren(...c.stats.map((key) => {
+    const card = document.createElement("div");
+    card.className = "stat";
+    card.innerHTML = `<span></span><b data-stat="${key}">—</b>`;
+    card.querySelector("span").textContent = STATS[key][0];
+    return card;
+  }));
+  if ($("test-tap")) $("test-tap").hidden = c.test !== "tap";
+  if ($("test-reaction")) $("test-reaction").hidden = c.test !== "reaction";
 }
 
-// ---------- charts ----------
-const spark = [];
-let lastSparkAt = 0;
-function drawSpark() {
-  const n = spark.length;
-  const x = (i) => (n < 2 ? 120 : (i / (n - 1)) * 120);
-  const y = (v) => 30 - (v / 100) * 28;
-  $("spark-line").setAttribute("points", spark.map((v, i) => `${x(i)},${y(v)}`).join(" "));
+// ---------- camera picture-in-picture ----------
+let camStarted = false;
+function renderCamera(s) {
+  const show = s.source_kind !== "mock" && s.camera_ok && s.control_mode === "mirror";
+  $("pip").hidden = !show || !camStarted;
+  if (show && !camStarted) {
+    camStarted = true;
+    const img = $("cam");
+    img.onload = () => { $("pip").hidden = false; };
+    img.onerror = () => { camStarted = false; };
+    img.src = "/video_feed";
+  }
 }
-function sparkHover(e) {
-  if (!spark.length) return;
-  const r = $("spark").getBoundingClientRect();
-  const i = Math.max(0, Math.min(spark.length - 1, Math.round(((e.clientX - r.left) / r.width) * (spark.length - 1))));
-  const v = spark[i];
-  const dot = $("spark-dot");
-  dot.setAttribute("cx", spark.length < 2 ? 120 : (i / (spark.length - 1)) * 120);
-  dot.setAttribute("cy", 30 - (v / 100) * 28);
-  dot.hidden = false;
-  const tip = $("spark-tip");
-  tip.textContent = `${v.toFixed(0)}% · ${spark.length - 1 - i}s ago`;
-  tip.style.left = `${e.clientX - r.left}px`;
-  tip.hidden = false;
-}
-$("spark").addEventListener("pointermove", sparkHover);
-$("spark").addEventListener("pointerleave", () => { $("spark-tip").hidden = true; $("spark-dot").hidden = true; });
 
+// ---------- intent waveform ----------
 const wave = [];
 const waveY = (v) => 39 - v * 38;
 function drawWave() {
-  const n = wave.length;
-  $("wave-line").setAttribute("points", wave.map((v, i) => `${(i / Math.max(1, 99)) * 200},${waveY(v)}`).join(" "));
+  $("wave-line").setAttribute("points", wave.map((v, i) => `${(i / 99) * 200},${waveY(v)}`).join(" "));
 }
 $("wave").addEventListener("pointermove", (e) => {
   if (!wave.length) return;
@@ -150,41 +171,33 @@ $("wave").addEventListener("pointermove", (e) => {
   dot.setAttribute("cy", waveY(v));
   dot.hidden = false;
   const tip = $("wave-tip");
-  tip.textContent = `Intent ${v.toFixed(2)} · ${((wave.length - 1 - i) / 10).toFixed(1)}s ago`;
+  tip.textContent = `${v.toFixed(2)} · ${((wave.length - 1 - i) / 10).toFixed(1)} s ago`;
   tip.style.left = `${e.clientX - r.left}px`;
   tip.hidden = false;
 });
 $("wave").addEventListener("pointerleave", () => { $("wave-tip").hidden = true; $("wave-dot").hidden = true; });
 
-function renderControl(s) {
-  const intentMode = s.control_mode === "intent";
-  document.querySelectorAll("[data-control]").forEach((b) => b.classList.toggle("on", b.dataset.control === s.control_mode));
-  document.querySelectorAll("[data-grip]").forEach((b) => b.classList.toggle("on", b.dataset.grip === s.grip));
-  $("grip-row").hidden = !intentMode;
-  $("cam-frame").classList.toggle("dimmed", intentMode);
-  $("cam-off-note").hidden = !intentMode;
-}
-
+// ---------- reaction chart ----------
 let lastTrialsSig = "";
 function drawTrials(latencies) {
   const svg = $("trials");
   if (!svg) return;
+  $("trials-wrap").hidden = !latencies.length;
   const sig = latencies.join(",");
   if (sig === lastTrialsSig) return;
   lastTrialsSig = sig;
-  svg.replaceChildren();
   const ns = "http://www.w3.org/2000/svg";
+  svg.replaceChildren();
   const base = document.createElementNS(ns, "line");
   Object.entries({ x1: 0, y1: 59, x2: 200, y2: 59, class: "baseline" }).forEach(([k, v]) => base.setAttribute(k, v));
   svg.append(base);
   const max = Math.max(1000, ...latencies);
-  const w = 200 / 10;
+  const w = 20;
   latencies.forEach((ms, i) => {
     const h = Math.max(2, (ms / max) * 56);
     const r = document.createElementNS(ns, "rect");
-    Object.entries({ x: i * w + 2, y: 59 - h, width: w - 4, height: h, rx: 2, class: "trial-bar" })
-      .forEach(([k, v]) => r.setAttribute(k, v));
-    r.addEventListener("pointerenter", (e) => {
+    Object.entries({ x: i * w + 3, y: 59 - h, width: w - 6, height: h, rx: 3, class: "bar-mark" }).forEach(([k, v]) => r.setAttribute(k, v));
+    r.addEventListener("pointerenter", () => {
       const tip = $("trials-tip");
       tip.textContent = `Trial ${i + 1}: ${ms} ms`;
       tip.style.left = `${((i + 0.5) * w / 200) * 100}%`;
@@ -195,235 +208,229 @@ function drawTrials(latencies) {
   });
 }
 
-// ---------- incident log ----------
+// ---------- activity ----------
 let lastEventsSig = "";
+function eventItem(e) {
+  const [label, sev] = EVENT_LABELS[e.type] || [e.type, "info"];
+  const li = document.createElement("li");
+  li.className = sev;
+  const time = document.createElement("time");
+  time.textContent = fmtClock(e.t);
+  const text = document.createElement("span");
+  text.textContent = label + (e.ms !== undefined ? ` · ${e.ms} ms` : "") + (e.message ? ` · ${e.message}` : "");
+  li.append(time, text);
+  return li;
+}
 function renderEvents(events) {
   const ul = $("event-log");
   if (!ul) return;
-  const sig = events.length + JSON.stringify(events.slice(-1));
+  const shown = events.filter((e) => e.type !== "cue" && e.type !== "calibration_squeeze");
+  const sig = shown.length + JSON.stringify(shown.slice(-1));
   if (sig === lastEventsSig) return;
   lastEventsSig = sig;
-  ul.replaceChildren();
-  if (!events.length) { ul.innerHTML = '<li class="muted">No incidents yet</li>'; return; }
-  [...events].reverse().forEach((e) => {
-    const [label, sev] = EVENT_LABELS[e.type] || [e.type, "info"];
-    const li = document.createElement("li");
-    li.className = sev;
-    const time = document.createElement("time");
-    time.textContent = fmtClock(e.t);
-    const tag = document.createElement("span");
-    tag.className = "sev";
-    tag.textContent = sev === "warn" ? "⚠ WARN" : "INFO";
-    li.append(time, tag, label + (e.ms !== undefined ? `: ${e.ms} ms` : ""));
-    ul.append(li);
-  });
+  const recent = [...shown].reverse();
+  ul.replaceChildren(...recent.slice(0, 5).map(eventItem));
+  if (!recent.length) ul.innerHTML = '<li class="muted">Nothing yet</li>';
+  $("log-more").hidden = recent.length <= 5;
+  $("event-log-all").replaceChildren(...recent.slice(5).map(eventItem));
 }
 
-// ---------- tapping results ----------
+// ---------- tap results ----------
 function renderTapping(t) {
   if (!t || !$("tap-results")) return;
-  $("tap-results").hidden = false;
+  $("tap-results").hidden = !!t.error;
   const flag = $("tap-flag");
   flag.hidden = false;
   if (t.error) {
-    ["tap-taps", "tap-rate", "tap-dec", "tap-cv"].forEach((id) => setText(id, "—"));
-    setText("tap-taps", t.taps ?? 0);
     flag.className = "flag warn";
-    flag.textContent = "⚠ Not enough taps detected. Keep the hand in view and try again";
+    flag.textContent = "Not enough taps. Keep the hand in view and try again.";
     return;
   }
   setText("tap-taps", t.taps);
-  setText("tap-rate", t.rate_hz.toFixed(2));
-  setText("tap-dec", t.decrement_pct.toFixed(0));
+  setText("tap-rate", `${t.rate_hz.toFixed(1)} /s`);
+  setText("tap-dec", `${t.decrement_pct.toFixed(0)}%`);
   setText("tap-cv", t.rhythm_cv.toFixed(2));
   const concern = t.flag !== "within typical range";
   flag.className = `flag ${concern ? "warn" : "good"}`;
-  flag.textContent = concern ? `⚠ ${t.flag}: share with the clinician` : `✓ ${t.flag}`;
+  flag.textContent = concern ? "Possible bradykinesia. Review with a clinician." : "Within typical range.";
 }
 
-// ---------- main render ----------
-function render(s) {
-  ensureCamera(s);
-  setText("source-badge", SOURCE_LABELS[s.source_kind] || s.source_kind);
-  $("source-badge").className = `badge ${s.source_kind}`;
+// ---------- control panel ----------
+function renderControl(s) {
+  const intentMode = s.control_mode === "intent";
+  document.querySelectorAll("[data-control]").forEach((b) => b.classList.toggle("on", b.dataset.control === s.control_mode));
+  document.querySelectorAll("[data-grip]").forEach((b) => b.classList.toggle("on", b.dataset.grip === s.grip));
+  $("grip-row").hidden = !intentMode;
   const hw = s.source_kind === "hardware";
   $("sim-intent").hidden = hw;
   $("hw-intent").hidden = !hw;
   $("auto-intent").checked = s.intent_auto;
+  $("btn-hold").classList.toggle("active", s.intent_held);
 
-  FINGERS.forEach((f, i) => {
-    $(`bar-${f}`).style.width = `${(s.angles[i] / 160) * 100}%`;
-    setText(`ang-${f}`, `${s.angles[i]}°`);
-  });
-  const [label, cls, handState] = gateState(s);
-  const pill = $("gate-status");
-  pill.textContent = label;
-  pill.className = `pill ${cls}`;
-  hand.update(s.angles, handState);
-  renderControl(s);
+  setText("intent-val", s.intent_strength.toFixed(2));
+  setText("intent-label", !s.calibrated ? "Calibrating. Stay relaxed." : s.intent_active ? "Trying" : "Relaxed");
+  $("intent-label").classList.toggle("on", s.intent_active);
   wave.push(s.intent_strength);
   if (wave.length > 100) wave.shift();
   drawWave();
 
-  $("bar-intent").style.width = `${s.intent_strength * 100}%`;
-  setText("intent-val", s.intent_strength.toFixed(2));
-  setText("intent-label", !s.calibrated ? "Calibrating, stay relaxed…" : s.intent_active ? "Intent detected" : "Relaxed");
-  $("intent-label").classList.toggle("on", s.intent_active);
-  $("btn-hold").classList.toggle("active", s.intent_held);
   const t = s.touch || {};
   setText("pad-temple", t.temple ?? "—");
   setText("pad-forearm", t.forearm ?? "—");
-  setText("pad-temple-d", s.calibrated ? `${(t.temple_drop * 100).toFixed(0)}% change` : "");
-  setText("pad-forearm-d", s.calibrated ? `${(t.forearm_drop * 100).toFixed(0)}% change` : "");
-  setText("cal-status", s.range_calibrated ? "✓ scaled to this wearer" : "using default threshold");
-  const cal = s.calibration_phase;
-  $("cal-overlay").hidden = !cal;
-  if (cal) {
-    setText("cal-word", cal === "relax" ? "RELAX" : "SQUEEZE");
-    setText("cal-help", cal === "relax" ? "Sit still and let your hand go loose"
-      : "Clench your jaw and squeeze your hand as hard as you can" + (s.source_kind === "hardware" ? "" : " (hold Space)"));
-    setText("cal-left", Math.ceil(s.calibration_remaining_s));
-    $("cal-overlay").classList.toggle("squeeze", cal === "squeeze");
-  }
-
-  setText("reps", s.reps);
-  setText("activation", s.activation_rate.toFixed(0));
-  setText("tremor", s.tremor_hz.toFixed(1));
-  setText("tremor-src", s.source_kind === "camera" ? "from camera" : "from wristband");
-  setText("tremor-amp", s.tremor_amp.toFixed(4));
-  setText("steadiness", s.steadiness.toFixed(0));
-  setText("latency", s.latency_ms_mean ?? "—");
-  setText("latency-trials", s.latency_trials);
+  setText("pad-temple-d", s.calibrated ? `${(t.temple_drop * 100).toFixed(0)}%` : "");
+  setText("pad-forearm-d", s.calibrated ? `${(t.forearm_drop * 100).toFixed(0)}%` : "");
+  setText("cal-status", s.range_calibrated ? "Calibrated" : "");
   setText("difficulty", s.difficulty);
-  setText("comp-count", s.compensation_count);
-  renderEvents(s.events);
-  drawTrials(s.latencies || []);
-  if (s.tapping) renderTapping(s.tapping);
-  if (s.mode !== currentMode) { currentMode = s.mode; applyMode(s.mode); }
+}
 
+function renderOverlays(s) {
   $("cue-overlay").hidden = !s.cue_active;
   $("tap-overlay").hidden = !s.tapping_active;
   setText("tap-left", Math.ceil(s.tapping_remaining_s));
-  setText("cue-status", s.cue_pending ? "get ready…" : s.cue_active ? "waiting for grip…" : "");
-
-  const now = Date.now();
-  if (now - lastSparkAt > 1000) {
-    lastSparkAt = now;
-    spark.push(s.activation_rate);
-    if (spark.length > 60) spark.shift();
-    drawSpark();
+  setText("cue-status", s.cue_pending ? "Get ready." : s.cue_active ? "Waiting for grip." : "Cue appears after 1–3 s.");
+  const cal = s.calibration_phase;
+  $("cal-overlay").hidden = !cal;
+  if (cal) {
+    const sim = s.source_kind !== "hardware";
+    setText("cal-word", cal === "relax" ? "Relax" : "Squeeze");
+    setText("cal-help", cal === "relax" ? "Keep still." : `Clench your jaw and squeeze hard${sim ? " (hold Space)" : ""}.`);
+    setText("cal-left", Math.ceil(s.calibration_remaining_s));
+    $("cal-overlay").classList.toggle("squeeze", cal === "squeeze");
   }
+}
+
+// ---------- main render ----------
+function render(s) {
+  if (s.mode !== currentMode) { currentMode = s.mode; applyCondition(s.mode); }
+  setText("source-label", SOURCE_LABELS[s.source_kind] || s.source_kind);
+  setText("cond-note", (CONDITIONS[s.mode] || CONDITIONS.stroke).note(s));
+
+  const [label, cls, handState] = gateState(s);
+  const pill = $("gate-status");
+  pill.textContent = label;
+  pill.className = `pill ${cls}`;
+  hand.update(s, handState);
+
+  renderCamera(s);
+  renderControl(s);
+  renderOverlays(s);
+  document.querySelectorAll("[data-stat]").forEach((el) => { el.textContent = STATS[el.dataset.stat][1](s); });
+  renderEvents(s.events);
+  drawTrials(s.latencies || []);
+  if (s.tapping) renderTapping(s.tapping);
 }
 
 // ---------- socket ----------
 const socket = io();
-socket.on("connect", () => setText("conn", "● live"));
-socket.on("disconnect", () => setText("conn", "disconnected, retrying…"));
+socket.on("connect", () => $("conn-dot").classList.add("live"));
+socket.on("disconnect", () => { $("conn-dot").classList.remove("live"); setText("source-label", "Reconnecting"); });
 socket.on("state", render);
 socket.on("event", (e) => {
   if (e.type === "cue") { $("cue-overlay").hidden = false; beep(1400, 200); }
-  if (e.type === "latency") toast(`Reaction time: ${e.ms} ms`);
-  if (e.type === "calibration_squeeze") beep(900, 150);
-  if (e.type === "calibrated") toast(`Calibrated: temple range ${e.temple_range_pct}%, forearm ${e.forearm_range_pct}%`);
-  if (e.type === "calibration_failed") toast(`Calibration failed: ${e.reason}`);
+  if (e.type === "latency") toast(`Reaction ${e.ms} ms`);
   if (e.type === "latency_miss") toast("No grip within 3 s");
-  if (e.type === "tapping") { renderTapping(e); toast(e.error ? "Finger-tap test: not enough taps" : `Finger-tap test: ${e.taps} taps, ${e.flag}`); }
-  if (e.type === "shoulder_hike" || e.type === "trunk_lean") {
-    const pill = $("gate-status");
-    pill.classList.add("flash");
-    setTimeout(() => pill.classList.remove("flash"), 600);
-  }
+  if (e.type === "tapping") { renderTapping(e); toast(e.error ? "Not enough taps" : `${e.taps} taps`); }
+  if (e.type === "calibration_squeeze") beep(900, 150);
+  if (e.type === "calibrated") toast(`Calibrated · temple ${e.temple_range_pct}%, forearm ${e.forearm_range_pct}%`);
+  if (e.type === "calibration_failed") toast(e.reason);
+  if (e.type === "agent_alert" && e.message) toast(e.message);
 });
 
 // ---------- controls ----------
-$("mode-select").addEventListener("change", (e) => api("/api/mode", "POST", { mode: e.target.value }).catch((err) => toast(err.message)));
-
-document.querySelectorAll("[data-control]").forEach((b) => b.addEventListener("click", () =>
-  api("/api/control", "POST", { mode: b.dataset.control }).catch((err) => toast(err.message))));
-document.querySelectorAll("[data-grip]").forEach((b) => b.addEventListener("click", () =>
-  api("/api/control", "POST", { mode: "intent", grip: b.dataset.grip }).catch((err) => toast(err.message))));
-
-$("btn-cal").addEventListener("click", () => api("/api/calibrate").catch((err) => toast(err.message)));
+const fail = (err) => toast(err.message);
+document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => api("/api/mode", "POST", { mode: b.dataset.mode }).catch(fail)));
+document.querySelectorAll("[data-control]").forEach((b) => b.addEventListener("click", () => api("/api/control", "POST", { mode: b.dataset.control }).catch(fail)));
+document.querySelectorAll("[data-grip]").forEach((b) => b.addEventListener("click", () => api("/api/control", "POST", { mode: "intent", grip: b.dataset.grip }).catch(fail)));
+$("btn-cal").addEventListener("click", () => api("/api/calibrate").catch(fail));
+$("auto-intent").addEventListener("change", (e) => api("/api/intent/auto", "POST", { auto: e.target.checked }).catch(fail));
 
 let held = false;
 function setHeld(v) {
   if (v === held) return;
   held = v;
-  api("/api/intent", "POST", { held: v }).catch((err) => toast(err.message));
+  api("/api/intent", "POST", { held: v }).catch(fail);
 }
 const holdBtn = $("btn-hold");
 holdBtn.addEventListener("pointerdown", (e) => { e.preventDefault(); setHeld(true); });
 ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => holdBtn.addEventListener(ev, () => setHeld(false)));
 document.addEventListener("keydown", (e) => {
-  if (e.code === "Space" && !e.repeat && !["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(document.activeElement.tagName)) {
+  if (e.code === "Space" && !e.repeat && !["INPUT", "SELECT", "TEXTAREA", "BUTTON", "SUMMARY"].includes(document.activeElement.tagName)) {
     e.preventDefault();
     setHeld(true);
   }
 });
 document.addEventListener("keyup", (e) => { if (e.code === "Space") setHeld(false); });
 window.addEventListener("blur", () => setHeld(false));
-$("auto-intent").addEventListener("change", (e) => api("/api/intent/auto", "POST", { auto: e.target.checked }).catch((err) => toast(err.message)));
 
-async function withStatus(statusId, btn, fn) {
+async function busy(btn, statusId, fn) {
   btn.disabled = true;
-  setText(statusId, "working…");
+  setText(statusId, "Working…");
   try { await fn(); setText(statusId, ""); }
-  catch (err) { setText(statusId, `⚠ ${err.message}`); }
+  catch (err) { setText(statusId, err.message); }
   finally { btn.disabled = false; }
 }
 
 if (role === "therapist") {
-  const changeDiff = (d) => api("/api/difficulty", "POST", { level: Number($("difficulty").textContent) + d }).catch((err) => toast(err.message));
+  const changeDiff = (d) => api("/api/difficulty", "POST", { level: Number($("difficulty").textContent) + d }).catch(fail);
   $("diff-up").onclick = () => changeDiff(1);
   $("diff-down").onclick = () => changeDiff(-1);
-  $("btn-cue").onclick = () => api("/api/latency").catch((err) => toast(err.message));
-  $("btn-tap").onclick = () => api("/api/tapping", "POST", { seconds: 10 }).catch((err) => toast(err.message));
-  $("btn-end").onclick = () => withStatus("agent-status", $("btn-end"), async () => {
-    await api("/api/session/end");
-    spark.length = 0;
-    toast("Session saved");
-  });
-
-  $("btn-agent").onclick = () => withStatus("agent-status", $("btn-agent"), async () => {
+  $("btn-cue").onclick = () => api("/api/latency").catch(fail);
+  $("btn-tap").onclick = () => api("/api/tapping", "POST", { seconds: 10 }).catch(fail);
+  const review = () => busy($("btn-agent"), "agent-status", async () => {
     const r = await api("/api/agent");
     $("agent-out").hidden = false;
-    setText("agent-summary", r.summary || "The model returned no summary.");
+    setText("agent-summary", r.summary || "No summary returned.");
     setText("agent-plan", r.next_session_plan || "—");
-    const ol = $("agent-trace");
-    ol.replaceChildren();
-    r.trace.forEach((t) => {
+    setText("trace-summary", `Agent steps (${r.trace.length})`);
+    $("agent-trace").replaceChildren(...r.trace.map((t) => {
       const li = document.createElement("li");
-      const head = document.createElement("div");
-      head.className = "trace-head";
-      head.textContent = `${t.tool}(${JSON.stringify(t.args)})`;
+      if (t.reasoning) {
+        const why = document.createElement("p");
+        why.className = "why";
+        why.textContent = t.reasoning;
+        li.append(why);
+      }
+      const head = document.createElement("code");
+      head.textContent = `${t.tool}(${Object.keys(t.args).length ? JSON.stringify(t.args) : ""})`;
       const pre = document.createElement("pre");
-      pre.textContent = JSON.stringify(t.result, null, 1).slice(0, 700);
+      pre.textContent = JSON.stringify(t.result, null, 1).slice(0, 600);
       li.append(head, pre);
-      ol.append(li);
-    });
-    if (!r.trace.length) ol.innerHTML = '<li class="muted">The model answered without calling tools</li>';
+      return li;
+    }));
   });
 
-  $("btn-triage").onclick = () => withStatus("triage-status", $("btn-triage"), async () => {
+  $("btn-agent").onclick = review;
+  $("btn-end").onclick = async () => {
+    try {
+      await api("/api/session/end");
+    } catch (err) {
+      toast(err.message);
+      return;
+    }
+    toast("Session saved");
+    review(); // the agent reviews every finished session
+  };
+
+  $("btn-triage").onclick = () => busy($("btn-triage"), "triage-status", async () => {
     const r = await api("/api/triage", "GET");
     const tbody = $("triage-table").querySelector("tbody");
-    tbody.replaceChildren();
-    const icon = { urgent: "▲", watch: "●", stable: "✓" };
-    r.patients.forEach((p) => {
+    const labels = { urgent: "Urgent", monitor: "Monitor", stable: "Stable" };
+    const trends = { improving: "Improving", declining: "Declining", stable: "Stable" };
+    tbody.replaceChildren(...r.patients.map((p) => {
       const tr = document.createElement("tr");
-      [`${icon[p.urgency]} ${p.urgency.toUpperCase()}`, `${p.name} (${p.patient_id})`, p.condition, `${p.last_session_days_ago} d ago`, p.reason]
-        .forEach((v, i) => {
-          const td = document.createElement("td");
-          td.textContent = v;
-          if (i === 0) td.className = `urg ${p.urgency}`;
-          tr.append(td);
-        });
-      tbody.append(tr);
-    });
+      [labels[p.urgency] || p.urgency, p.name, p.condition, trends[p.trend] || "—", `${p.last_session_days_ago} d`, p.reason].forEach((v, i) => {
+        const td = document.createElement("td");
+        td.textContent = v;
+        if (i === 0) td.className = `urg ${p.urgency}`;
+        if (i === 3) td.className = `trend ${p.trend || ""}`;
+        tr.append(td);
+      });
+      return tr;
+    }));
     $("triage-table").hidden = false;
   });
 } else {
-  $("btn-explain").onclick = () => withStatus("explain-status", $("btn-explain"), async () => {
+  $("btn-explain").onclick = () => busy($("btn-explain"), "explain-status", async () => {
     const r = await api("/api/patient_view");
     setText("explain-text", r.text);
   });
