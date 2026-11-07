@@ -51,15 +51,15 @@ export function createHand3D(container) {
   container.replaceChildren(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x15170f, 9, 18);
+  scene.fog = new THREE.Fog(0x0d100b, 8, 17);
   const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 60);
-  camera.position.set(3.4, 1.7, 6.4);
+  camera.position.set(3.4, 1.9, 8.6);
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 0.45, 0);
+  controls.target.set(0, 0.3, 0);
   controls.enableDamping = true;
   controls.enablePan = false;
-  controls.minDistance = 4;
-  controls.maxDistance = 10;
+  controls.minDistance = 5;
+  controls.maxDistance = 13;
 
   scene.add(new THREE.HemisphereLight(0xf3f1e6, 0x23261a, 1.1));
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -72,11 +72,21 @@ export function createHand3D(container) {
   glow.position.set(0, 0.9, 1.7);
   scene.add(glow);
 
-  const grid = new THREE.GridHelper(14, 28, 0x59632c, 0x2a2e19);
+  const grid = new THREE.GridHelper(16, 32, 0x7a8c2a, 0x252b12);
   grid.position.y = -2.1;
   grid.material.transparent = true;
-  grid.material.opacity = 0.55;
+  grid.material.opacity = 0.5;
   scene.add(grid);
+  // glowing floor rings under the arm
+  const floorRings = [[0.9, 0xd4ee6a, 0.55], [1.35, 0xd4ee6a, 0.22], [2.1, 0x4aa8ff, 0.12]].map(([r, color, opacity]) => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.025, 96),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = -2.08;
+    ring.userData.base = opacity;
+    scene.add(ring);
+    return ring;
+  });
 
   // materials
   const skin = new THREE.MeshStandardMaterial({ color: 0xdfe1cf, roughness: 0.42, metalness: 0.08, transparent: true });
@@ -239,8 +249,12 @@ export function createHand3D(container) {
     th.joints[1].rotation.x = c * 0.7;
     th.joints[2].rotation.x = c * 0.8;
 
-    // idle sway
+    // idle sway + floor glow that brightens while the patient is trying
     root.rotation.y = Math.sin(t * 0.35) * 0.12;
+    floorRings.forEach((ring, i) => {
+      const boost = state.intent_active ? 1.8 : 1;
+      ring.material.opacity = ring.userData.base * boost * (0.85 + 0.15 * Math.sin(t * 2 + i));
+    });
 
     // Parkinson's: tremor at the measured frequency (none shown when none is measured)
     const f = mode === "parkinsons" ? state.tremor_hz : 0;
@@ -315,7 +329,7 @@ export function createHand3D(container) {
     // gate glow: green while moving, red when blocked
     emissiveTarget.setHex(gate === "open" ? OLIVE : gate === "blocked" ? RED : 0x000000);
     skin.emissive.lerp(emissiveTarget, Math.min(1, dt * 6));
-    skin.emissiveIntensity = 0.35;
+    skin.emissiveIntensity = 0.16;
     glow.color.copy(gate === "blocked" ? new THREE.Color(RED) : new THREE.Color(OLIVE));
     glow.intensity += ((gate ? 6 : 0) - glow.intensity) * Math.min(1, dt * 5);
 
