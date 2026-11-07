@@ -69,3 +69,36 @@ def test_hold_ramps_intent_up_gradually():
     assert strengths[0] < 0.3          # not instant: the grip builds up
     assert strengths[10] < strengths[30] < strengths[-1]
     assert strengths[-1] == 1.0
+
+
+def _calibrated_detector():
+    from neurogrip.intent import IntentDetector
+    d = IntentDetector(calib_frames=5)
+    for i in range(5):
+        d.update(SensorFrame(i, 70, 70, 0, 0, 1000))
+    d.set_calibration((70.0, 70.0), (0.3, 0.3))  # this person's full squeeze = 30% change
+    return d
+
+
+def test_calibrated_range_scales_strength():
+    d = _calibrated_detector()
+    assert d.range_calibrated
+    assert not d.update(SensorFrame(10, 62, 62, 0, 0, 1000)).active      # 38% of range < 40% (level 3)
+    full = d.update(SensorFrame(11, 49, 49, 0, 0, 1000))                 # full squeeze
+    assert full.active and full.strength == 1.0
+    mid = d.update(SensorFrame(12, 55, 55, 0, 0, 1000))                  # ~71% of range
+    assert mid.active and 0.7 < mid.strength < 0.8
+
+
+def test_calibrate_from_relaxed_and_effort():
+    from neurogrip.intent import calibrate_from
+    base, full = calibrate_from([(70, 72)] * 50, [(49, 50)] * 50)
+    assert base == (70.0, 72.0)
+    assert abs(full[0] - 0.3) < 0.01 and abs(full[1] - 22 / 72) < 0.01
+
+
+def test_calibrate_from_rejects_no_change():
+    import pytest
+    from neurogrip.intent import calibrate_from
+    with pytest.raises(ValueError, match="forearm"):
+        calibrate_from([(70, 70)] * 50, [(50, 70)] * 50)

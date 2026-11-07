@@ -18,3 +18,7 @@ def test_fmt_servo_clamps():
 def test_fmt_led_and_buzzer():
     assert fmt_led("G") == "L,G\n"
     assert fmt_buzzer(880, 120) == "B,880,120\n"
+
+
+def test_firmware_info_lines_are_ignored():
+    assert parse_sensor_line("# NeuroGrip firmware 2 | ESP32-WROOM-32E | accel=none\n") is None

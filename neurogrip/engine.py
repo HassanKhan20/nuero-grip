@@ -13,7 +13,7 @@ import numpy as np
 
 from .clinical import analyze_tapping, cv_tremor
 from .gate import CONTROL_MODES, GRIPS, THRESHOLDS, Gate
-from .intent import IntentDetector
+from .intent import CAL_FRACTIONS, IntentDetector, calibrate_from
 from .metrics import SessionMetrics
 from .protocol import fmt_buzzer, fmt_led, fmt_servo
 from .signals import steadiness, tremor_frequency
@@ -29,6 +29,7 @@ DEFAULT_LEVEL = 3
 SENSOR_TIMEOUT_S = 1.0
 CV_TREMOR_WINDOW_S = 5.0
 CUE_DELAY_MS = (1000, 3000)
+CAL_RELAX_MS, CAL_SQUEEZE_MS = 2000, 3000
 
 
 class Engine:
@@ -51,6 +52,11 @@ class Engine:
         self._last_led: str | None = None
         self._last_frame_at = 0.0
         self._cue_at_ms: int | None = None
+        self._cal_phase: str | None = None
+        self._cal_until = 0
+        self._cal_relaxed: list[tuple[int, int]] = []
+        self._cal_effort: list[tuple[int, int]] = []
+        self._touch = {"temple": 0, "forearm": 0, "temple_drop": 0.0, "forearm_drop": 0.0}
         self._tap_start_ms: int | None = None
         self._tap_duration_ms = 10000
         self._tap_samples: list[tuple[float, float]] = []
@@ -71,9 +77,12 @@ class Engine:
         with self._lock:
             self._t_ms = f.ms
             istate = self.intent.update(f)
+            self._touch = {"temple": f.temple, "forearm": f.forearm,
+                           "temple_drop": istate.temple_drop, "forearm_drop": istate.forearm_drop}
+            cal_events = self._calibration_step(f)
             v = self.vision.latest(f.ms)
             g = self.gate.step(istate, v)
-            events = self.metrics.update(f.ms, istate, v, g)
+            events = self.metrics.update(f.ms, istate, v, g) + cal_events
 
             self.source.send(fmt_servo(*g.angles))
             if g.led != self._last_led:
@@ -119,6 +128,30 @@ class Engine:
                 except Exception:
                     log.exception("event listener failed")
         return live
+
+    def _calibration_step(self, f) -> list[dict]:
+        if self._cal_phase is None:
+            return []
+        (self._cal_relaxed if self._cal_phase == "relax" else self._cal_effort).append((f.temple, f.forearm))
+        if f.ms < self._cal_until:
+            return []
+        if self._cal_phase == "relax":
+            self._cal_phase, self._cal_until = "squeeze", f.ms + CAL_SQUEEZE_MS
+            return [{"t": f.ms, "type": "calibration_squeeze"}]
+        self._cal_phase = None
+        try:
+            base, full = calibrate_from(self._cal_relaxed, self._cal_effort)
+        except ValueError as e:
+            return [{"t": f.ms, "type": "calibration_failed", "reason": str(e)}]
+        self.intent.set_calibration(base, full)
+        return [{"t": f.ms, "type": "calibrated",
+                 "temple_range_pct": round(full[0] * 100, 1), "forearm_range_pct": round(full[1] * 100, 1)}]
+
+    def start_calibration(self) -> None:
+        """Relax for 2 s, then squeeze as hard as possible for 3 s: scales intent to this wearer."""
+        with self._lock:
+            self._cal_phase, self._cal_until = "relax", self._t_ms + CAL_RELAX_MS
+            self._cal_relaxed, self._cal_effort = [], []
 
     def _update_tremor(self) -> None:
         if len(self._mags) >= 128:
@@ -171,6 +204,11 @@ class Engine:
                     "sensors_ok": time.monotonic() - self._last_frame_at < SENSOR_TIMEOUT_S,
                     "source_kind": self.kind,
                     "control_mode": self.gate.control, "grip": self.gate.grip,
+                    "touch": dict(self._touch),
+                    "range_calibrated": self.intent.range_calibrated,
+                    "calibration_phase": self._cal_phase,
+                    "calibration_remaining_s": round(max(0, self._cal_until - self._t_ms) / 1000, 1)
+                    if self._cal_phase else 0.0,
                     "camera_ok": getattr(self.vision, "available", True),
                     "intent_held": self.control.held, "intent_auto": self.control.auto,
                     "cue_pending": self._cue_at_ms is not None,
@@ -182,6 +220,7 @@ class Engine:
         level = max(1, min(5, int(level)))
         with self._lock:
             self.intent.threshold = THRESHOLDS[level - 1]
+            self.intent.fraction = CAL_FRACTIONS[level - 1]
             self.metrics.difficulty = level
         return level
 
@@ -244,6 +283,11 @@ def source_kind_from_env() -> str:
     return kind
 
 
+def default_control(kind: str) -> str:
+    """Hardware runs the core loop (headband -> fingers) by default; camera/mock show mirroring."""
+    return "intent" if kind == "hardware" else "mirror"
+
+
 def make_engine() -> Engine:
     store = make_store()
     kind = source_kind_from_env()
@@ -255,5 +299,5 @@ def make_engine() -> Engine:
         engine = Engine(MockSource(control=IntentControl(), realtime=True), CameraVision(camera), store, kind="camera")
     else:
         engine = Engine(SerialSource(os.environ["NG_SERIAL_PORT"]), CameraVision(camera), store, kind="hardware")
-    engine.set_control(os.environ.get("NG_CONTROL", "mirror"), os.environ.get("NG_GRIP", "fist"))
+    engine.set_control(os.environ.get("NG_CONTROL", default_control(kind)), os.environ.get("NG_GRIP", "fist"))
     return engine

@@ -99,6 +99,12 @@ def create_app(engine, start: bool = True):
         engine.start_tapping_test(max(3.0, min(30.0, float(seconds))))
         return jsonify(ok=True)
 
+    @app.post("/api/calibrate")
+    @login_required
+    def api_calibrate():
+        engine.start_calibration()
+        return jsonify(ok=True)
+
     @app.post("/api/control")
     @login_required
     def api_control():

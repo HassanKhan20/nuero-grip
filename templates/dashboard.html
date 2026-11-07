@@ -73,6 +73,11 @@
     </div>
     <p class="muted small wave-caption">Intent signal, last 10 s · dashed line = threshold</p>
     <p id="intent-label" class="intent-label muted">Calibrating…</p>
+    <div class="pads">
+      <div><span class="muted small">Temple pad</span><b id="pad-temple">—</b><span class="muted small" id="pad-temple-d"></span></div>
+      <div><span class="muted small">Forearm pad</span><b id="pad-forearm">—</b><span class="muted small" id="pad-forearm-d"></span></div>
+    </div>
+    <div class="row cal-row"><button type="button" id="btn-cal" class="secondary">Calibrate to this person</button><span id="cal-status" class="muted small"></span></div>
     <div id="sim-intent">
       <button id="btn-hold" class="hold">Hold to try</button>
       <p class="muted small">or hold <kbd>Space</kbd>. This stands in for the headband.</p>
@@ -172,6 +177,11 @@
 <div id="tap-overlay" class="overlay tap" hidden><div>
   <p class="overlay-big"><span id="tap-left">10</span>s</p>
   <p>Tap your thumb and index finger together, as fast and as wide as you can</p>
+</div></div>
+<div id="cal-overlay" class="overlay cal" hidden><div>
+  <p class="overlay-big" id="cal-word">RELAX</p>
+  <p id="cal-help">Sit still and let your hand go loose</p>
+  <p class="overlay-count"><span id="cal-left">2</span>s</p>
 </div></div>
 <div id="toast" class="toast" hidden></div>
 

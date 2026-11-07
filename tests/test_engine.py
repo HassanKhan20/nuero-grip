@@ -207,3 +207,54 @@ def test_intent_only_moves_hand_without_vision():
     assert max(max(a) for a in [e.state()["angles"]]) >= 0  # state ok
     closes = [c for c in e.source.sent if c.startswith("A,") and c != "A,0,0,0,0,0\n"]
     assert closes, "robot never moved with intent only"
+
+
+def _cal_engine():
+    from neurogrip.sources import IntentControl
+    ctl = IntentControl()
+    e = Engine(MockSource(control=ctl), MockVision(), MemoryStore(), kind="camera")
+    for _ in range(120):
+        e.step()
+    return e, ctl
+
+
+def test_calibration_flow():
+    e, ctl = _cal_engine()
+    got = []
+    e.listeners.append(got.append)
+    e.start_calibration()
+    assert e.state()["calibration_phase"] == "relax"
+    for _ in range(101):
+        e.step()
+    assert e.state()["calibration_phase"] == "squeeze"
+    ctl.held = True
+    for _ in range(151):
+        e.step()
+    s = e.state()
+    assert s["calibration_phase"] is None and s["range_calibrated"]
+    assert any(ev["type"] == "calibrated" for ev in got)
+    assert s["intent_active"] and s["intent_strength"] > 0.9
+
+
+def test_calibration_fails_without_squeeze():
+    e, _ = _cal_engine()
+    got = []
+    e.listeners.append(got.append)
+    e.start_calibration()
+    for _ in range(260):
+        e.step()
+    assert any(ev["type"] == "calibration_failed" for ev in got)
+    assert not e.state()["range_calibrated"]
+
+
+def test_state_shows_raw_touch_readings():
+    e = _engine()
+    e.step()
+    t = e.state()["touch"]
+    assert set(t) == {"temple", "forearm", "temple_drop", "forearm_drop"} and t["temple"] > 0
+
+
+def test_hardware_defaults_to_intent_control():
+    from neurogrip.engine import default_control
+    assert default_control("hardware") == "intent"
+    assert default_control("camera") == "mirror"

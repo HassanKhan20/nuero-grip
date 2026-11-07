@@ -200,3 +200,12 @@ select, input { background: var(--panel); color: var(--text); border: 1px solid 
 .wave circle { fill: var(--good); stroke: var(--panel); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .wave .threshold { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
 .wave-caption { margin: .2rem 0 0; }
+
+/* raw pad readout + calibration */
+.pads { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: .8rem; }
+.pads div { background: var(--panel-2); border-radius: 8px; padding: .45rem .6rem; display: grid; }
+.pads b { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.cal-row { margin-bottom: .9rem; }
+.overlay.cal { background: color-mix(in srgb, var(--panel) 94%, transparent); color: var(--text); }
+.overlay.cal.squeeze { background: var(--overlay-cue); color: #fff; }
+.overlay-count { font-size: 2rem; font-weight: 700; margin: .5rem 0 0; }

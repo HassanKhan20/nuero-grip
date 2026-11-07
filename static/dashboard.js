@@ -19,6 +19,9 @@ const EVENT_LABELS = {
   latency_miss: ["Reaction test missed (>3 s)", "warn"],
   cue: ["Reaction cue shown", "info"],
   tapping: ["Finger-tap test complete", "info"],
+  calibration_squeeze: ["Calibration: squeeze phase", "info"],
+  calibrated: ["Intent calibrated to wearer", "info"],
+  calibration_failed: ["Calibration failed", "warn"],
 };
 
 const SOURCE_LABELS = { mock: "MOCK DATA", camera: "CAMERA MODE", hardware: "HARDWARE" };
@@ -267,6 +270,21 @@ function render(s) {
   setText("intent-label", !s.calibrated ? "Calibrating, stay relaxed…" : s.intent_active ? "Intent detected" : "Relaxed");
   $("intent-label").classList.toggle("on", s.intent_active);
   $("btn-hold").classList.toggle("active", s.intent_held);
+  const t = s.touch || {};
+  setText("pad-temple", t.temple ?? "—");
+  setText("pad-forearm", t.forearm ?? "—");
+  setText("pad-temple-d", s.calibrated ? `${(t.temple_drop * 100).toFixed(0)}% change` : "");
+  setText("pad-forearm-d", s.calibrated ? `${(t.forearm_drop * 100).toFixed(0)}% change` : "");
+  setText("cal-status", s.range_calibrated ? "✓ scaled to this wearer" : "using default threshold");
+  const cal = s.calibration_phase;
+  $("cal-overlay").hidden = !cal;
+  if (cal) {
+    setText("cal-word", cal === "relax" ? "RELAX" : "SQUEEZE");
+    setText("cal-help", cal === "relax" ? "Sit still and let your hand go loose"
+      : "Clench your jaw and squeeze your hand as hard as you can" + (s.source_kind === "hardware" ? "" : " (hold Space)"));
+    setText("cal-left", Math.ceil(s.calibration_remaining_s));
+    $("cal-overlay").classList.toggle("squeeze", cal === "squeeze");
+  }
 
   setText("reps", s.reps);
   setText("activation", s.activation_rate.toFixed(0));
@@ -305,6 +323,9 @@ socket.on("state", render);
 socket.on("event", (e) => {
   if (e.type === "cue") { $("cue-overlay").hidden = false; beep(1400, 200); }
   if (e.type === "latency") toast(`Reaction time: ${e.ms} ms`);
+  if (e.type === "calibration_squeeze") beep(900, 150);
+  if (e.type === "calibrated") toast(`Calibrated: temple range ${e.temple_range_pct}%, forearm ${e.forearm_range_pct}%`);
+  if (e.type === "calibration_failed") toast(`Calibration failed: ${e.reason}`);
   if (e.type === "latency_miss") toast("No grip within 3 s");
   if (e.type === "tapping") { renderTapping(e); toast(e.error ? "Finger-tap test: not enough taps" : `Finger-tap test: ${e.taps} taps, ${e.flag}`); }
   if (e.type === "shoulder_hike" || e.type === "trunk_lean") {
@@ -321,6 +342,8 @@ document.querySelectorAll("[data-control]").forEach((b) => b.addEventListener("c
   api("/api/control", "POST", { mode: b.dataset.control }).catch((err) => toast(err.message))));
 document.querySelectorAll("[data-grip]").forEach((b) => b.addEventListener("click", () =>
   api("/api/control", "POST", { mode: "intent", grip: b.dataset.grip }).catch((err) => toast(err.message))));
+
+$("btn-cal").addEventListener("click", () => api("/api/calibrate").catch((err) => toast(err.message)));
 
 let held = false;
 function setHeld(v) {

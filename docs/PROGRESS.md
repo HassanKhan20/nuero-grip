@@ -10,7 +10,7 @@ _Last updated: 2026-11-07_
 - The reaction test is timed until the camera sees your grip.
 - The Nemotron agent, AI triage and the Gemini patient view all run.
 
-**Hardware: the firmware is written for 5 servos, one per finger. It has never been compiled or flashed.** See [Hardware checklist](#hardware-checklist).
+**Hardware:** the firmware is written for **our exact board** (Inland ESP32-WROOM-32E) with 5 SG90 servos. It has never been compiled or flashed. See [Hardware checklist](#hardware-checklist).
 
 ## Run it (5 minutes)
 
@@ -25,11 +25,11 @@ $env:NG_MODE = "camera"                      # or "mock" (no camera) or "hardwar
 |---|---|---|---|
 | `camera` (default) | real webcam | not needed | **Hold to try** button or **Space** (or the Auto toggle) |
 | `mock` | none (synthetic hand) | not needed | automatic 3 s on / 3 s off cycle |
-| `hardware` | real webcam | required (`NG_SERIAL_PORT=COM5`) | capacitive headband |
+| `hardware` | real webcam (optional) | required (`NG_SERIAL_PORT=COM5`) | foil pads on the headband and forearm. **Starts in Intent only control.** |
 
 Logins: `therapist` / `therapist` sees everything. `patient` / `patient` gets the simplified view.
 
-Tests: `.venv\Scripts\python -m pytest tests -q`. All 91 should pass.
+Tests: `.venv\Scripts\python -m pytest tests -q`. All 100 should pass.
 
 To use the AI features, set these first. Without them the buttons show a clear error.
 
@@ -110,6 +110,8 @@ Each finger's servo angle = that finger's curl × 160°. Serial command: `A,<thu
 | Feature | Track |
 |---|---|
 | **Intent-only control:** the hand moves from intent alone, with no camera, in 4 grip shapes and smooth motion | Demo / Hardware |
+| **Calibrate to this person** (relax, then squeeze) scales intent to the wearer's own pads, with a live raw-pad readout | Hardware |
+| Firmware for our board: pins on the left header, auto-detects ADXL345 or LIS3DHTR, averaged touch reads | Hardware |
 | Camera mode: every feature works with only a webcam | Demo |
 | Live camera feed with hand skeleton, beside a robotic hand that mimics all 5 fingers | Overall / Hardware |
 | Hold-to-try or Space as a stand-in for the headband; Auto toggle | Demo |
@@ -136,26 +138,35 @@ Each finger's servo angle = that finger's curl × 160°. Serial command: `A,<thu
 
 ## Hardware checklist
 
-Full wiring is in [`firmware/README.md`](../firmware/README.md).
+**Our parts:**
+- **Board:** Inland ESP32 dev board (**ESP32-WROOM-32E**, classic ESP32).
+- **Servos:** 5× SG90, one per finger.
+- **Power:** 4×AA pack for the servos.
+- **Intent pads:** 2× foil pads, one in the headband and one on the forearm.
+- **Other:** Grove buzzer, Grove green and red LEDs, Grove accelerometer (ADXL345 *or* LIS3DHTR, auto-detected).
 
-- [ ] Install Arduino IDE, the **ESP32 board package 3.x** and **ESP32Servo ≥ 3.0**. On 2.x the buzzer can break a servo.
-- [ ] Wire the **5 servos**:
+Full wiring and test steps are in [`firmware/README.md`](../firmware/README.md).
 
-  | Finger | Thumb | Index | Middle | Ring | Pinky |
-  |---|---|---|---|---|---|
-  | GPIO | 13 | 18 | 19 | 23 | 33 |
+| Part | Pin |
+|---|---|
+| Servo thumb / index / middle / ring / pinky | **IO13 / IO14 / IO27 / IO26 / IO25** (left header) |
+| Temple pad / forearm pad | **IO32 / IO33** (left header) |
+| Buzzer / LED green / LED red | IO18 / IO19 / IO23 |
+| Accelerometer SDA / SCL | IO21 / IO22 |
 
-  Don't use GPIO 0, 2, 5, 12 or 15. They can stop the board from booting.
-- [ ] Power the servos from a **separate 5V supply rated 3 A or more**, with its ground tied to the ESP32 GND. Five servos stalling on a grip can draw several amps.
-- [ ] Flash, then open Serial Monitor at 115200. You should see `S,...` lines at about 50 per second.
-- [ ] Send `A,90,90,90,90,90`. All five servos should move, then return to 0 within 0.5 s (the watchdog).
-- [ ] Bench test: keep sending `A,90,90,90,90,90` while sending `B,1000,200`. No servo should twitch.
-- [ ] Close Serial Monitor, then run with `$env:NG_MODE="hardware"` and `$env:NG_SERIAL_PORT="COM5"` (your port).
-- [ ] Tune finger curls with `.venv\Scripts\python -m neurogrip.vision` if the hand doesn't follow well.
+⚠️ **Nothing on SD0–SD3, CMD or CLK** (flash pins) **and nothing on IO12** (boot pin). In the current breadboard photo, one wire looks like it's on **SD2** and one on **IO12**. Move them.
 
-**Parts assumptions. Tell Hassan if any are wrong.**
-- Classic ESP32 DevKit. On an ESP32-S3 the touch pins change.
-- The Grove accelerometer is an **ADXL345**. A LIS3DHTR needs a different read function.
+- [ ] Arduino IDE → board **"ESP32 Dev Module"** (esp32 core 3.x) + library **ESP32Servo**.
+- [ ] Wire the servo **signal** wires to the pins above.
+- [ ] Wire the AA pack: **+** → all servo red wires. **−** → all servo brown wires **and** ESP32 GND. Add a **470–1000 µF capacitor** across the pack.
+- [ ] Make the pads: foil + short wire, a **thin foam or cloth layer** between foil and skin, strapped on firmly.
+- [ ] Flash, then open Serial Monitor at 115200. The first line names the accelerometer, then `S,...` lines stream. Squeezing should drop the pad numbers.
+- [ ] Send `A,90,90,90,90,90`. All five fingers move, then reopen within 0.5 s (the safety watchdog).
+- [ ] Close Serial Monitor. Run `$env:NG_MODE="hardware"; $env:NG_SERIAL_PORT="COM5"; .venv\Scripts\python app.py`.
+- [ ] On the dashboard click **Calibrate to this person**: relax for 2 s, then clench and squeeze for 3 s.
+- [ ] Squeeze → the fingers close. Relax → they open. **That's the core loop.**
+
+**Not tested yet:** the firmware hasn't been compiled on a real board. If the Arduino IDE shows an error, paste it to Hassan or Claude.
 
 ## Decisions worth knowing
 - **"Bilateral symmetry" is now "gate activation rate":** the % of time the patient's intent was strong enough to move the robot. Symmetry would always read about 100%, because the servo copies the healthy hand.

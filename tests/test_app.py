@@ -93,3 +93,9 @@ def test_control_endpoint(client):
     r = client.post("/api/control", json={"mode": "intent", "grip": "pinch"})
     assert r.status_code == 200 and r.get_json() == {"control_mode": "intent", "grip": "pinch"}
     assert client.post("/api/control", json={"mode": "nope"}).status_code == 400
+
+
+def test_calibrate_endpoint(client):
+    _login(client, "patient")
+    assert client.post("/api/calibrate").get_json() == {"ok": True}
+    assert client.get("/api/state").get_json()["calibration_phase"] == "relax"
