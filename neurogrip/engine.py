@@ -224,6 +224,20 @@ class Engine:
             self.metrics.difficulty = level
         return level
 
+    def post_event(self, event: dict) -> dict:
+        """Add an out-of-loop event (e.g. an AI agent alert) to the activity log, store and live socket."""
+        with self._lock:
+            e = {"t": self._t_ms, **event}
+            self.metrics.events.append(e)
+            self.new_events.append(e)
+            self._persist({**e, "patient_id": self.patient_id, "mode": self.mode})
+        for fn in list(self.listeners):
+            try:
+                fn(e)
+            except Exception:
+                log.exception("event listener failed")
+        return e
+
     def cue_latency(self) -> None:
         """Schedule a reaction cue 1-3 s from now (random so the patient can't anticipate it)."""
         with self._lock:

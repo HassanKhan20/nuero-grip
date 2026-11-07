@@ -35,7 +35,7 @@ def test_agent_runs_tool_loop():
     tools = _tools()
     final = json.dumps({"summary": "Good session.", "next_session_plan": "Level 4."})
     client = FakeClient([
-        _msg(calls=[_call("get_session_metrics", {}, 1)]),
+        _msg(content="First I check how the session went.", calls=[_call("get_session_metrics", {}, 1)]),
         _msg(calls=[_call("set_difficulty", {"level": 4, "reason": "high activation"}, 2)]),
         _msg(content=final),
     ])
@@ -44,6 +44,25 @@ def test_agent_runs_tool_loop():
     assert tools.engine.state()["difficulty"] == 4
     assert out["summary"] == "Good session." and out["next_session_plan"] == "Level 4."
     assert client.requests[0]["tools"] == ToolBox.SCHEMAS
+    assert out["trace"][0]["reasoning"] == "First I check how the session went."
+
+
+def test_reasoning_falls_back_to_think_block():
+    client = FakeClient([_msg(content="<think>History matters here.</think>",
+                              calls=[_call("get_patient_history", {}, 1)]), _msg(content="done")])
+    out = run_agent(client, "m", _tools())
+    assert out["trace"][0]["reasoning"] == "History matters here."
+
+
+def test_warning_feedback_reaches_dashboard_and_buzzer():
+    tools = _tools()
+    seen = []
+    tools.engine.listeners.append(seen.append)
+    tools.call("trigger_feedback", json.dumps({"kind": "warning", "message": "activation rate down 12%"}))
+    assert "L,R\n" in tools.engine.source.sent
+    ev = tools.engine.state()["events"][-1]
+    assert ev["type"] == "agent_alert" and ev["kind"] == "warning" and "activation" in ev["message"]
+    assert seen and seen[-1]["type"] == "agent_alert"
 
 
 def test_agent_plain_text_final():

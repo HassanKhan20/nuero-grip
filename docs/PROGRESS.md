@@ -133,7 +133,7 @@ Each finger's servo angle = that finger's curl × 160°. Serial command: `A,<thu
 
 ### Not started
 - Therapist → patient text messages (Winstead). Only if we have time.
-- Vultr deploy and GoDaddy domain. Manual steps, about 20 minutes total.
+- Vultr deploy and GoDaddy domain. Manual steps, about 20 minutes total: follow [DEPLOY.md](DEPLOY.md).
 - Real Nemotron and Gemini calls haven't been tried yet, because no API keys are set here. Test them once you have keys.
 
 ## Hardware checklist
@@ -177,7 +177,6 @@ Full wiring and test steps are in [`firmware/README.md`](../firmware/README.md).
 - **All Parkinson's and cognitive outputs are labeled screening indicators,** never diagnoses.
 
 ## Known issues (small, deferred)
-- "detailed thinking off" may be the wrong switch for Nemotron v1.5. Check the model card; it may be `/no_think`.
 - The camera tracks one hand. Keep the robot hand out of frame so it doesn't track the wrong one.
 - The camera's tremor threshold (`CV_TREMOR_MIN_AMP` in `clinical.py`) may need tuning on the demo webcam.
 - If the ESP32 resets in the middle of a reaction test, that trial can get stuck.

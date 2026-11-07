@@ -2,14 +2,35 @@
 import json
 import re
 
-URGENCY_ORDER = {"urgent": 0, "watch": 1, "stable": 2}
+URGENCY_ORDER = {"urgent": 0, "monitor": 1, "stable": 2}
+STALE_DAYS = 3  # no session in this many days -> URGENT
+TREND_DELTA = 5  # activation-rate points (first -> last session) that count as a real trend
 
-TRIAGE_PROMPT = """detailed thinking off
-You triage a caseload of neuro-rehabilitation patients so no one is overlooked.
-For EVERY patient decide urgency: "urgent" (needs therapist contact within 24h), "watch", or "stable".
-Consider: falling gate activation trend, rising tremor frequency, slowing reaction latency, frequent compensation,
-and long gaps since the last session. Give a one-sentence reason citing the numbers.
-Reply with ONLY a JSON array: [{"patient_id": "...", "urgency": "...", "reason": "..."}]"""
+TRIAGE_PROMPT = """/no_think
+You are a patient triage AI for a neuro-rehabilitation clinic, so no patient is overlooked.
+You receive a JSON list of patients. Per patient: name, condition, latency_ms_mean (reaction latency),
+tremor_hz (0 = none), activation_rate_trend (gate activation % over their last 5 sessions, oldest first:
+the % of time their intent was strong enough to move the robotic hand), compensation_per_session,
+last_session_days_ago, and trend (improving / declining / stable).
+
+For EVERY patient:
+- Assign urgency: "URGENT", "MONITOR", or "STABLE".
+- Give ONE sentence explaining why, citing the numbers.
+- Anyone with no session in 3+ days, or a declining trend, is URGENT.
+- MONITOR patients who are not urgent but show a concern: tremor present, reaction latency above 1000 ms,
+  or 5+ compensation events per session.
+
+Sort by urgency (URGENT first). Reply with ONLY a JSON array:
+[{"patient_id": "...", "urgency": "URGENT", "reason": "..."}]"""
+
+
+def trend_of(series: list[float]) -> str:
+    delta = series[-1] - series[0]
+    if delta >= TREND_DELTA:
+        return "improving"
+    if delta <= -TREND_DELTA:
+        return "declining"
+    return "stable"
 
 
 def seed_demo_patients() -> list[dict]:
@@ -18,16 +39,34 @@ def seed_demo_patients() -> list[dict]:
         ("P-102", "Jordan K.", "parkinsons", 9, [70, 64, 55, 49, 41], 5.8, 910, 6),
         ("P-103", "Riley S.", "cp", 1, [35, 38, 40, 44, 47], 0.0, 1020, 5),
         ("P-104", "Morgan T.", "stroke", 14, [58, 51, 44, 38, 30], 0.0, 1180, 9),
-        ("P-105", "Casey L.", "phantom", 3, [60, 62, 63, 65, 64], 0.0, 760, 1),
-        ("P-106", "Quinn R.", "cognitive", 4, [72, 71, 70, 69, 70], 0.0, 1340, 2),
+        ("P-105", "Casey L.", "phantom", 1, [60, 62, 63, 65, 64], 0.0, 760, 1),
+        ("P-106", "Quinn R.", "cognitive", 2, [72, 71, 70, 69, 70], 0.0, 1340, 2),
         ("P-107", "Taylor B.", "parkinsons", 2, [55, 56, 54, 57, 58], 4.6, 880, 2),
-        ("P-108", "Drew P.", "stroke", 6, [50, 49, 47, 46, 44], 0.0, 990, 7),
+        ("P-108", "Drew P.", "stroke", 2, [50, 49, 47, 46, 44], 0.0, 990, 7),
         ("P-109", "Skyler N.", "cp", 1, [28, 33, 39, 45, 52], 0.0, 1100, 4),
         ("P-110", "Emerson H.", "cognitive", 21, [68, 66, 63, 59, 56], 0.0, 1520, 3),
     ]
     keys = ["patient_id", "name", "condition", "last_session_days_ago", "activation_rate_trend",
             "tremor_hz", "latency_ms_mean", "compensation_per_session"]
-    return [dict(zip(keys, r)) for r in rows]
+    patients = [dict(zip(keys, r)) for r in rows]
+    for p in patients:
+        p["trend"] = trend_of(p["activation_rate_trend"])
+    return patients
+
+
+def _rule_reason(p: dict) -> str | None:
+    """The clinic's hard rule: a stale or declining patient is always URGENT, whatever the model says."""
+    reasons = []
+    if p.get("last_session_days_ago", 0) >= STALE_DAYS:
+        reasons.append(f"no session in {p['last_session_days_ago']} days")
+    trend = p.get("trend") or trend_of(p.get("activation_rate_trend") or [0])
+    if trend == "declining":
+        series = p["activation_rate_trend"]
+        reasons.append(f"activation rate declining {series[0]}% → {series[-1]}%")
+    if not reasons:
+        return None
+    text = " and ".join(reasons)
+    return text[0].upper() + text[1:] + "."
 
 
 def _extract_json_array(text: str) -> list:
@@ -41,17 +80,27 @@ def _extract_json_array(text: str) -> list:
     return data
 
 
+def _norm_urgency(u) -> str | None:
+    u = str(u or "").strip().lower()
+    return {"watch": "monitor"}.get(u, u) if u in URGENCY_ORDER or u == "watch" else None
+
+
 def triage_patients(client, model: str, patients: list[dict]) -> list[dict]:
+    patients = [{**p, "trend": p.get("trend") or trend_of(p["activation_rate_trend"])} for p in patients]
     resp = client.chat.completions.create(model=model, temperature=0.1, messages=[
         {"role": "system", "content": TRIAGE_PROMPT},
         {"role": "user", "content": json.dumps(patients)},
     ])
     verdicts = {}
     for v in _extract_json_array(resp.choices[0].message.content):
-        if isinstance(v, dict) and v.get("urgency") in URGENCY_ORDER:
-            verdicts[v.get("patient_id")] = v
+        if isinstance(v, dict) and _norm_urgency(v.get("urgency")):
+            verdicts[v.get("patient_id")] = {**v, "urgency": _norm_urgency(v.get("urgency"))}
     out = []
     for p in patients:
-        v = verdicts.get(p["patient_id"], {"urgency": "watch", "reason": "not assessed by AI"})
-        out.append({**p, "urgency": v["urgency"], "reason": str(v.get("reason", ""))})
+        v = verdicts.get(p["patient_id"], {"urgency": "monitor", "reason": "not assessed by AI"})
+        urgency, reason = v["urgency"], str(v.get("reason", ""))
+        rule = _rule_reason(p)
+        if rule and urgency != "urgent":
+            urgency, reason = "urgent", rule
+        out.append({**p, "urgency": urgency, "reason": reason})
     return sorted(out, key=lambda r: URGENCY_ORDER[r["urgency"]])

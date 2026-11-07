@@ -22,7 +22,6 @@ def create_app(engine, start: bool = True):
     app = Flask(__name__)
     app.secret_key = os.environ.get("NG_SECRET", secrets.token_hex(16))
     socketio = SocketIO(app, async_mode="threading")
-    last_agent = {"summary": ""}
 
     def login_required(fn):
         @wraps(fn)
@@ -168,7 +167,6 @@ def create_app(engine, start: bool = True):
         except Exception as e:
             log.exception("agent failed")
             return jsonify(error=f"Nemotron call failed: {e}"), 502
-        last_agent["summary"] = result["summary"]
         return jsonify(result)
 
     @app.get("/api/triage")
@@ -178,7 +176,8 @@ def create_app(engine, start: bool = True):
         if client is None:
             return jsonify(error="NVIDIA_API_KEY not set"), 503
         try:
-            return jsonify(patients=triage_patients(client, nemotron_model(), seed_demo_patients()))
+            caseload = engine.store.patients() or seed_demo_patients()  # seeded into MongoDB at startup
+            return jsonify(patients=triage_patients(client, nemotron_model(), caseload))
         except Exception as e:
             log.exception("triage failed")
             return jsonify(error=f"triage failed: {e}"), 502
@@ -187,7 +186,8 @@ def create_app(engine, start: bool = True):
     @login_required
     def api_patient_view():
         try:
-            return jsonify(text=explain_for_patient(engine.state(), last_agent["summary"]))
+            history = engine.store.history(engine.patient_id, 1)
+            return jsonify(text=explain_for_patient(engine.state(), history[0] if history else None))
         except RuntimeError as e:
             return jsonify(error=str(e)), 503
         except Exception as e:

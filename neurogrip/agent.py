@@ -8,16 +8,30 @@ from .protocol import fmt_buzzer, fmt_led
 DEFAULT_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
-SYSTEM_PROMPT = """detailed thinking off
-You are NeuroGrip's rehabilitation session agent working alongside a licensed therapist.
-Work in steps using the tools:
-1. Call get_session_metrics to read the current session.
-2. Call get_patient_history to compare against earlier sessions.
-3. Decide the next difficulty level (1 = easiest intent threshold, 5 = hardest) and call set_difficulty with a short reason.
-   Raise difficulty when gate activation rate is high (>80%) with few compensation events; lower it when activation is low (<40%) or compensation is frequent.
-4. Optionally call trigger_feedback ("celebrate" or "correct_posture") to cue the patient.
-5. Finish with ONLY a JSON object: {"summary": "<3-4 sentence clinical summary for the therapist>", "next_session_plan": "<1-2 sentences>"}.
-Reference concrete numbers. Do not diagnose; flag concerns for the therapist."""
+SYSTEM_PROMPT = """/no_think
+You are NeuroGrip's neurorehabilitation AI agent, working alongside a licensed therapist.
+You have four tools:
+1. get_session_metrics: current session reps, reaction latency ms, tremor Hz, gate activation rate %
+   (the % of time the patient's intent was strong enough to move the robotic hand), compensation events.
+2. get_patient_history: the patient's previous sessions from the database.
+3. set_difficulty: sets the intent-detection threshold level (1 = easiest, 5 = hardest) for the next set.
+4. trigger_feedback: sends an alert to the therapist dashboard and the patient's buzzer/LEDs.
+
+After each set of reps:
+- Call get_session_metrics to see how the patient did.
+- Call get_patient_history to compare against past sessions.
+- Decide whether to make it harder, easier, or keep it the same, and call set_difficulty with your decision.
+  Raise it when activation rate is above 80% with few compensation events; lower it when activation is below 40%
+  or compensation is frequent; otherwise keep the same level.
+- If any metric is declining versus past sessions (activation rate falling, latency or tremor rising,
+  more compensation), call trigger_feedback with kind "warning" and a short message naming the metric.
+  Use "correct_posture" for frequent compensation and "celebrate" for a clear improvement.
+
+Before EVERY tool call, write one short sentence explaining your reasoning.
+Finish with ONLY a JSON object:
+{"summary": "<exactly 3 sentences for the therapist: what happened, what changed, what to do next>",
+ "next_session_plan": "<1 sentence>"}
+Cite concrete numbers. Never diagnose; flag concerns for the therapist."""
 
 
 def make_nvidia_client():
@@ -40,6 +54,13 @@ def _fn(name, description, props=None, required=None):
         "parameters": {"type": "object", "properties": props or {}, "required": required or []}}}
 
 
+FEEDBACK = {  # kind -> (buzzer Hz, buzzer ms, LED)
+    "warning": (500, 600, "R"),
+    "correct_posture": (300, 400, "R"),
+    "celebrate": (1200, 300, "G"),
+}
+
+
 class ToolBox:
     SCHEMAS = [
         _fn("get_session_metrics", "Live metrics for the current session: reps, gate activation rate %, "
@@ -49,9 +70,9 @@ class ToolBox:
         _fn("set_difficulty", "Set the intent-gate difficulty level for upcoming reps.",
             {"level": {"type": "integer", "minimum": 1, "maximum": 5}, "reason": {"type": "string"}},
             ["level", "reason"]),
-        _fn("trigger_feedback", "Cue the patient through the buzzer and LEDs.",
-            {"kind": {"type": "string", "enum": ["celebrate", "correct_posture"]}, "message": {"type": "string"}},
-            ["kind"]),
+        _fn("trigger_feedback", "Send an alert to the therapist dashboard and cue the patient through the buzzer and LEDs.",
+            {"kind": {"type": "string", "enum": list(FEEDBACK)}, "message": {"type": "string"}},
+            ["kind", "message"]),
     ]
 
     def __init__(self, engine):
@@ -71,15 +92,13 @@ class ToolBox:
         return {"level": level, "threshold": self.engine.intent.threshold, "reason": reason}
 
     def trigger_feedback(self, kind: str, message: str = "") -> dict:
-        if kind == "celebrate":
-            cmds = [fmt_buzzer(1200, 300), fmt_led("G")]
-        elif kind == "correct_posture":
-            cmds = [fmt_buzzer(300, 400), fmt_led("R")]
-        else:
+        if kind not in FEEDBACK:
             return {"error": f"unknown feedback kind {kind}"}
-        for c in cmds:
-            self.engine.send(c)
-        return {"sent": kind, "message": message}
+        hz, ms, led = FEEDBACK[kind]
+        self.engine.send(fmt_buzzer(hz, ms))
+        self.engine.send(fmt_led(led))
+        self.engine.post_event({"type": "agent_alert", "kind": kind, "message": message})
+        return {"sent": kind, "message": message, "dashboard": True}
 
     def call(self, name: str, arguments: str) -> tuple[dict, object]:
         try:
@@ -94,6 +113,16 @@ class ToolBox:
             return args, getattr(self, name)(**args)
         except Exception as e:  # report tool failures back to the model instead of crashing the loop
             return args, {"error": f"{type(e).__name__}: {e}"}
+
+
+def _reasoning(content: str | None) -> str:
+    """The model's explanation before a tool call: visible text, else its <think> block."""
+    content = content or ""
+    visible = re.sub(r"<think>.*?</think>", "", content, flags=re.S).strip()
+    if visible:
+        return visible
+    m = re.search(r"<think>(.*?)</think>", content, flags=re.S)
+    return m.group(1).strip()[:400] if m else ""
 
 
 def _parse_final(content: str) -> dict:
@@ -126,9 +155,11 @@ def run_agent(client, model: str, tools: ToolBox, max_steps: int = 6) -> dict:
         messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": [
             {"id": c.id, "type": "function", "function": {"name": c.function.name, "arguments": c.function.arguments}}
             for c in calls]})
-        for c in calls:
+        reasoning = _reasoning(msg.content)
+        for i, c in enumerate(calls):
             args, result = tools.call(c.function.name, c.function.arguments)
-            trace.append({"step": len(trace) + 1, "tool": c.function.name, "args": args, "result": result})
+            trace.append({"step": len(trace) + 1, "reasoning": reasoning if i == 0 else "",
+                          "tool": c.function.name, "args": args, "result": result})
             messages.append({"role": "tool", "tool_call_id": c.id, "content": json.dumps(result, default=str)})
     return {"summary": f"Agent stopped at the step limit ({max_steps}) before writing a summary.",
             "next_session_plan": "", "trace": trace}
