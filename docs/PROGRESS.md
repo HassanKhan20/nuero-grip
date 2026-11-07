@@ -29,7 +29,7 @@ $env:NG_MODE = "camera"                      # or "mock" (no camera) or "hardwar
 
 Logins: `therapist` / `therapist` sees everything. `patient` / `patient` gets the simplified view.
 
-Tests: `.venv\Scripts\python -m pytest tests -q`. All 80 should pass.
+Tests: `.venv\Scripts\python -m pytest tests -q`. All 91 should pass.
 
 To use the AI features, set these first. Without them the buttons show a clear error.
 
@@ -38,6 +38,14 @@ To use the AI features, set these first. Without them the buttons show a clear e
 | `NVIDIA_API_KEY` | Nemotron agent and AI triage | build.nvidia.com |
 | `GEMINI_API_KEY` | "Explain my progress" (patient view) | aistudio.google.com |
 | `MONGODB_URI` | MongoDB Atlas storage. Without it, data is kept in memory | MongoDB Atlas, free cluster |
+
+## The "mind control" demo: no camera needed
+1. On the **Robotic hand** tile, click **Intent only**. The camera dims and says *Camera not used*.
+2. Pick a grip shape: **Fist**, **Pinch**, **Point**, or **Wave** (fingers close one after another, thumb to pinky, the flashiest one).
+3. **Hold Space**, or wear the headband in hardware mode. The intent line rises past the dashed threshold and the robotic hand closes smoothly. The harder you try, the further it closes; relax and it opens.
+4. Hike a shoulder mid-grip (in camera mode): the hand freezes and glows red.
+
+What to say: *"With only the headband's muscle signal, no camera, the hand closes when the patient tries and opens when they relax. That's for patients with no healthy hand to mirror."*
 
 ## Try it in camera mode
 1. Log in as therapist and hold your hand up to the webcam. A skeleton is drawn on the feed.
@@ -64,7 +72,11 @@ webcam ─▶ MediaPipe hand + pose ─▶ 5 finger curls, ─────┘   
                               └─ Gemini patient explanation
 ```
 
-**The gate rule:** the robot hand moves only when all three are true:
+**Control modes:**
+- **Mirror camera:** each finger copies your healthy hand.
+- **Intent only:** intent strength closes the hand in the chosen grip shape, and no camera is needed. To start up as intent-only, set `NG_CONTROL=intent` and `NG_GRIP=wave`.
+
+**The gate rule (mirror mode):** the robot hand moves only when all three are true:
 1. Intent is detected.
 2. Posture is clean (no shoulder hike or trunk lean).
 3. The camera sees the healthy hand.
@@ -97,6 +109,7 @@ Each finger's servo angle = that finger's curl × 160°. Serial command: `A,<thu
 ### Done ✅
 | Feature | Track |
 |---|---|
+| **Intent-only control:** the hand moves from intent alone, with no camera, in 4 grip shapes and smooth motion | Demo / Hardware |
 | Camera mode: every feature works with only a webcam | Demo |
 | Live camera feed with hand skeleton, beside a robotic hand that mimics all 5 fingers | Overall / Hardware |
 | Hold-to-try or Space as a stand-in for the headband; Auto toggle | Demo |

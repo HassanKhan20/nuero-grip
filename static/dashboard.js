@@ -81,6 +81,11 @@ function gateState(s) {
   if (!s.sensors_ok) return ["Sensors offline", "bad", "blocked"];
   if (!s.calibrated) return ["Calibrating", "idle", ""];
   if (s.compensation && s.compensation.length) return ["Blocked: fix posture", "bad", "blocked"];
+  if (s.control_mode === "intent") {
+    if (s.gate_open) return ["Moving by intent", "good", "open"];
+    if (Math.max(...s.angles) > 0) return ["Relaxed: opening", "idle", ""];
+    return ["Try to grip", "idle", ""];
+  }
   if (s.gate_open) return ["Moving with you", "good", "open"];
   if (!s.curls) return ["Show your healthy hand", "idle", ""];
   if (!s.intent_active) return ["Waiting for intent", "idle", ""];
@@ -124,6 +129,38 @@ function sparkHover(e) {
 }
 $("spark").addEventListener("pointermove", sparkHover);
 $("spark").addEventListener("pointerleave", () => { $("spark-tip").hidden = true; $("spark-dot").hidden = true; });
+
+const wave = [];
+const waveY = (v) => 39 - v * 38;
+function drawWave() {
+  const n = wave.length;
+  $("wave-line").setAttribute("points", wave.map((v, i) => `${(i / Math.max(1, 99)) * 200},${waveY(v)}`).join(" "));
+}
+$("wave").addEventListener("pointermove", (e) => {
+  if (!wave.length) return;
+  const r = $("wave").getBoundingClientRect();
+  const i = Math.max(0, Math.min(wave.length - 1, Math.round(((e.clientX - r.left) / r.width) * 99)));
+  const v = wave[i];
+  if (v === undefined) return;
+  const dot = $("wave-dot");
+  dot.setAttribute("cx", (i / 99) * 200);
+  dot.setAttribute("cy", waveY(v));
+  dot.hidden = false;
+  const tip = $("wave-tip");
+  tip.textContent = `Intent ${v.toFixed(2)} · ${((wave.length - 1 - i) / 10).toFixed(1)}s ago`;
+  tip.style.left = `${e.clientX - r.left}px`;
+  tip.hidden = false;
+});
+$("wave").addEventListener("pointerleave", () => { $("wave-tip").hidden = true; $("wave-dot").hidden = true; });
+
+function renderControl(s) {
+  const intentMode = s.control_mode === "intent";
+  document.querySelectorAll("[data-control]").forEach((b) => b.classList.toggle("on", b.dataset.control === s.control_mode));
+  document.querySelectorAll("[data-grip]").forEach((b) => b.classList.toggle("on", b.dataset.grip === s.grip));
+  $("grip-row").hidden = !intentMode;
+  $("cam-frame").classList.toggle("dimmed", intentMode);
+  $("cam-off-note").hidden = !intentMode;
+}
 
 let lastTrialsSig = "";
 function drawTrials(latencies) {
@@ -220,6 +257,10 @@ function render(s) {
   pill.textContent = label;
   pill.className = `pill ${cls}`;
   hand.update(s.angles, handState);
+  renderControl(s);
+  wave.push(s.intent_strength);
+  if (wave.length > 100) wave.shift();
+  drawWave();
 
   $("bar-intent").style.width = `${s.intent_strength * 100}%`;
   setText("intent-val", s.intent_strength.toFixed(2));
@@ -275,6 +316,11 @@ socket.on("event", (e) => {
 
 // ---------- controls ----------
 $("mode-select").addEventListener("change", (e) => api("/api/mode", "POST", { mode: e.target.value }).catch((err) => toast(err.message)));
+
+document.querySelectorAll("[data-control]").forEach((b) => b.addEventListener("click", () =>
+  api("/api/control", "POST", { mode: b.dataset.control }).catch((err) => toast(err.message))));
+document.querySelectorAll("[data-grip]").forEach((b) => b.addEventListener("click", () =>
+  api("/api/control", "POST", { mode: "intent", grip: b.dataset.grip }).catch((err) => toast(err.message))));
 
 let held = false;
 function setHeld(v) {

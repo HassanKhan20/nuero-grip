@@ -32,6 +32,7 @@ Optional keys (features show a clear error without them):
 | `GEMINI_API_KEY` (+ `GEMINI_MODEL`) | "Explain my progress" in the patient view |
 | `MONGODB_URI` | MongoDB Atlas storage (otherwise in memory) |
 | `NG_MOCK_TREMOR` | mock tremor Hz (default 4.5, `0` = none) |
+| `NG_CONTROL` / `NG_GRIP` | start in `mirror` (default) or `intent` control; grip `fist`, `pinch`, `point`, `wave` |
 
 Tests: `.venv\Scripts\python -m pytest tests -q`
 

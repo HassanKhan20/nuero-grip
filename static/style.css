@@ -180,3 +180,23 @@ select, input { background: var(--panel); color: var(--text); border: 1px solid 
   .agent-cols { grid-template-columns: 1fr; }
   .topbar { padding: .75rem 16px; }
 }
+
+/* control mode + grip shape */
+.control-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .7rem; }
+.seg { display: inline-flex; background: var(--panel-2); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg-btn { background: transparent; color: var(--muted); padding: .3rem .7rem; font-size: .82rem; border-radius: 6px; font-weight: 600; }
+.seg-btn.on { background: var(--accent); color: #fff; }
+
+/* camera dimmed when not used */
+.cam-frame { position: relative; }
+.cam-frame.dimmed img { opacity: .18; filter: grayscale(1); }
+.cam-off-note { position: absolute; inset: 0; display: flex; flex-direction: column; gap: .3rem; align-items: center; justify-content: center; text-align: center; padding: 1rem; z-index: 1; }
+.cam-off-note b { font-size: 1.1rem; }
+.cam-off-note span { color: var(--muted); font-size: .85rem; max-width: 26ch; }
+
+/* intent waveform */
+.wave { width: 100%; height: 52px; margin-top: .6rem; overflow: visible; }
+.wave polyline { fill: none; stroke: var(--good); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.wave circle { fill: var(--good); stroke: var(--panel); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.wave .threshold { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.wave-caption { margin: .2rem 0 0; }

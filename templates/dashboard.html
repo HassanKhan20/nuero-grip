@@ -31,7 +31,8 @@
   <!-- HERO: healthy hand (camera) → gate → robotic hand -->
   <section class="tile hero-cam" data-metric="grip">
     <h2>Healthy hand <span class="muted">camera</span></h2>
-    <div class="cam-frame">
+    <div class="cam-frame" id="cam-frame">
+      <div id="cam-off-note" class="cam-off-note" hidden><b>Camera not used</b><span>Intent-only control: the hand moves from motor intent alone</span></div>
       <img id="cam" alt="Live camera with hand skeleton" hidden>
       <div id="cam-placeholder" class="cam-placeholder">
         <p id="cam-msg">Camera feed appears in camera mode</p>
@@ -42,6 +43,15 @@
 
   <section class="tile hero-robot" data-metric="grip">
     <h2>Robotic hand <span id="gate-status" class="pill">—</span></h2>
+    <div class="control-row">
+      <div class="seg" role="group" aria-label="Control mode">
+        <button type="button" class="seg-btn" data-control="mirror">Mirror camera</button>
+        <button type="button" class="seg-btn" data-control="intent">Intent only</button>
+      </div>
+      <div id="grip-row" class="seg" role="group" aria-label="Grip shape" hidden>
+        {% for g in ['fist', 'pinch', 'point', 'wave'] %}<button type="button" class="seg-btn" data-grip="{{ g }}">{{ g|capitalize }}</button>{% endfor %}
+      </div>
+    </div>
     <div id="hand" class="hand-wrap"></div>
     <div class="bars">
       {% for f in ['thumb', 'index', 'middle', 'ring', 'pinky'] %}
@@ -53,6 +63,15 @@
   <section class="tile hero-intent" data-metric="intent">
     <h2>Motor intent</h2>
     <div class="bar intent"><span>Strength</span><div class="track"><div id="bar-intent" class="fill intent-fill"></div></div><b id="intent-val">0.00</b></div>
+    <div class="spark-wrap">
+      <svg id="wave" class="wave" viewBox="0 0 200 40" preserveAspectRatio="none" aria-label="Intent strength over the last 10 seconds">
+        <line x1="0" y1="39" x2="200" y2="39" class="baseline"/>
+        <line x1="0" y1="20" x2="200" y2="20" class="threshold"/>
+        <polyline id="wave-line" points=""/><circle id="wave-dot" r="2.5" hidden/>
+      </svg>
+      <div id="wave-tip" class="tip" hidden></div>
+    </div>
+    <p class="muted small wave-caption">Intent signal, last 10 s · dashed line = threshold</p>
     <p id="intent-label" class="intent-label muted">Calibrating…</p>
     <div id="sim-intent">
       <button id="btn-hold" class="hold">Hold to try</button>
