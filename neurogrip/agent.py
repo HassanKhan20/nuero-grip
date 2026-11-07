@@ -5,11 +5,14 @@ import re
 
 from .protocol import fmt_buzzer, fmt_led
 
-DEFAULT_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b"  # hosted on build.nvidia.com; the v1.5 49B was retired
+# Model-card settings: temperature 1.0 / top_p 0.95 for all tasks; reasoning on, low effort (fast enough for a live
+# demo). The reasoning trace comes back in message.reasoning_content and is shown in the dashboard tool trace.
+NEMOTRON_KWARGS = {"temperature": 1.0, "top_p": 0.95,
+                   "extra_body": {"chat_template_kwargs": {"enable_thinking": True, "low_effort": True}}}
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
-SYSTEM_PROMPT = """/no_think
-You are NeuroGrip's neurorehabilitation AI agent, working alongside a licensed therapist.
+SYSTEM_PROMPT = """You are NeuroGrip's neurorehabilitation AI agent, working alongside a licensed therapist.
 You have four tools:
 1. get_session_metrics: current session reps, reaction latency ms, tremor Hz, gate activation rate %
    (the % of time the patient's intent was strong enough to move the robotic hand), compensation events.
@@ -115,14 +118,18 @@ class ToolBox:
             return args, {"error": f"{type(e).__name__}: {e}"}
 
 
-def _reasoning(content: str | None) -> str:
-    """The model's explanation before a tool call: visible text, else its <think> block."""
-    content = content or ""
+def _reasoning(msg) -> str:
+    """The model's explanation before a tool call: its visible text, else its reasoning trace."""
+    content = getattr(msg, "content", None) or ""
     visible = re.sub(r"<think>.*?</think>", "", content, flags=re.S).strip()
     if visible:
         return visible
-    m = re.search(r"<think>(.*?)</think>", content, flags=re.S)
-    return m.group(1).strip()[:400] if m else ""
+    trace = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None)
+    if not trace:
+        m = re.search(r"<think>(.*?)</think>", content, flags=re.S)
+        trace = m.group(1) if m else ""
+    trace = str(trace).strip()
+    return trace if len(trace) <= 400 else trace[:400].rsplit(" ", 1)[0] + "..."
 
 
 def _parse_final(content: str) -> dict:
@@ -147,7 +154,7 @@ def run_agent(client, model: str, tools: ToolBox, max_steps: int = 6) -> dict:
     trace: list[dict] = []
     for _ in range(max_steps):
         resp = client.chat.completions.create(model=model, messages=messages, tools=ToolBox.SCHEMAS,
-                                              tool_choice="auto", temperature=0.2)
+                                              tool_choice="auto", **NEMOTRON_KWARGS)
         msg = resp.choices[0].message
         calls = msg.tool_calls or []
         if not calls:
@@ -155,7 +162,7 @@ def run_agent(client, model: str, tools: ToolBox, max_steps: int = 6) -> dict:
         messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": [
             {"id": c.id, "type": "function", "function": {"name": c.function.name, "arguments": c.function.arguments}}
             for c in calls]})
-        reasoning = _reasoning(msg.content)
+        reasoning = _reasoning(msg)
         for i, c in enumerate(calls):
             args, result = tools.call(c.function.name, c.function.arguments)
             trace.append({"step": len(trace) + 1, "reasoning": reasoning if i == 0 else "",

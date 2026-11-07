@@ -2,12 +2,13 @@
 import json
 import re
 
+from .agent import NEMOTRON_KWARGS
+
 URGENCY_ORDER = {"urgent": 0, "monitor": 1, "stable": 2}
 STALE_DAYS = 3  # no session in this many days -> URGENT
 TREND_DELTA = 5  # activation-rate points (first -> last session) that count as a real trend
 
-TRIAGE_PROMPT = """/no_think
-You are a patient triage AI for a neuro-rehabilitation clinic, so no patient is overlooked.
+TRIAGE_PROMPT = """You are a patient triage AI for a neuro-rehabilitation clinic, so no patient is overlooked.
 You receive a JSON list of patients. Per patient: name, condition, latency_ms_mean (reaction latency),
 tremor_hz (0 = none), activation_rate_trend (gate activation % over their last 5 sessions, oldest first:
 the % of time their intent was strong enough to move the robotic hand), compensation_per_session,
@@ -87,7 +88,7 @@ def _norm_urgency(u) -> str | None:
 
 def triage_patients(client, model: str, patients: list[dict]) -> list[dict]:
     patients = [{**p, "trend": p.get("trend") or trend_of(p["activation_rate_trend"])} for p in patients]
-    resp = client.chat.completions.create(model=model, temperature=0.1, messages=[
+    resp = client.chat.completions.create(model=model, **NEMOTRON_KWARGS, messages=[
         {"role": "system", "content": TRIAGE_PROMPT},
         {"role": "user", "content": json.dumps(patients)},
     ])

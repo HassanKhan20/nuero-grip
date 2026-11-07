@@ -47,6 +47,16 @@ def test_agent_runs_tool_loop():
     assert out["trace"][0]["reasoning"] == "First I check how the session went."
 
 
+def test_reasoning_uses_reasoning_content_and_model_card_settings():
+    msg = SimpleNamespace(content=None, reasoning_content="Activation fell, so check history.",
+                          tool_calls=[_call("get_patient_history", {}, 1)])
+    client = FakeClient([SimpleNamespace(choices=[SimpleNamespace(message=msg)]), _msg(content="done")])
+    out = run_agent(client, "m", _tools())
+    assert out["trace"][0]["reasoning"] == "Activation fell, so check history."
+    req = client.requests[0]
+    assert req["temperature"] == 1.0 and req["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
+
+
 def test_reasoning_falls_back_to_think_block():
     client = FakeClient([_msg(content="<think>History matters here.</think>",
                               calls=[_call("get_patient_history", {}, 1)]), _msg(content="done")])
