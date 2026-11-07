@@ -33,3 +33,10 @@ def test_gate_blocked_by_compensation_holds_angles():
     g.step(ACTIVE, VisionResult({"thumb": 0.5, "index": 0.5, "rest": 0.5}, []))
     out = g.step(ACTIVE, VisionResult({"thumb": 1, "index": 1, "rest": 1}, ["trunk_lean"]))
     assert not out.open and out.angles == (80, 80, 80) and out.led == "R"
+
+
+def test_open_hand_releases_servos():
+    g = Gate()
+    g.step(ACTIVE, VisionResult({"thumb": 1, "index": 1, "rest": 1}, []))
+    out = g.step(ACTIVE, VisionResult({"thumb": 0, "index": 0, "rest": 0}, []))
+    assert out.open and out.target_set and out.angles == (0, 0, 0)

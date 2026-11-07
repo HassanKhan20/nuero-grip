@@ -50,3 +50,13 @@ def test_mock_vision_has_curls_and_occasional_compensation():
     assert all(r.curls is not None for r in results)
     assert max(r.curls["index"] for r in results) > 0.9
     assert any(r.compensation for r in results) and not all(r.compensation for r in results)
+
+
+def test_camera_result_goes_stale():
+    import time
+    from neurogrip.vision import CameraVision, VisionResult
+    cam = CameraVision(0)  # not started
+    cam._set(VisionResult({"thumb": 1, "index": 1, "rest": 1}, []))
+    assert cam.latest().curls is not None
+    cam._result_at = time.monotonic() - 1
+    assert cam.latest().curls is None

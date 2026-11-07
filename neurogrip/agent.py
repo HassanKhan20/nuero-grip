@@ -26,7 +26,8 @@ def make_nvidia_client():
         return None
     from openai import OpenAI
 
-    return OpenAI(base_url=os.environ.get("NVIDIA_BASE_URL", DEFAULT_BASE_URL), api_key=key)
+    return OpenAI(base_url=os.environ.get("NVIDIA_BASE_URL", DEFAULT_BASE_URL), api_key=key,
+                  timeout=45, max_retries=1)
 
 
 def nemotron_model() -> str:

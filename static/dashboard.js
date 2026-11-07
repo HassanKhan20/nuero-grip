@@ -44,6 +44,7 @@ function applyMode(mode) {
 }
 
 function gateLabel(s) {
+  if (!s.sensors_ok) return ["Sensors offline", "bad"];
   if (!s.calibrated) return ["Calibrating", "idle"];
   if (s.compensation && s.compensation.length) return ["Blocked: posture", "bad"];
   if (s.gate_open) return ["Gate open", "good"];

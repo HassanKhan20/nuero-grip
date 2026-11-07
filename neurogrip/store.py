@@ -1,5 +1,6 @@
 """Session storage: MongoDB Atlas when MONGODB_URI is set, otherwise in memory."""
 import copy
+import logging
 import os
 import time
 import uuid
@@ -35,7 +36,9 @@ class MongoStore:
     def __init__(self, uri: str):
         from pymongo import MongoClient
 
-        self.db = MongoClient(uri, serverSelectionTimeoutMS=5000)["neurogrip"]
+        client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+        client.admin.command("ping")  # fail fast at startup, not mid-session
+        self.db = client["neurogrip"]
 
     def save_session(self, doc: dict) -> str:
         doc = {**doc, "saved_at": time.time()}
@@ -57,4 +60,10 @@ class MongoStore:
 
 def make_store() -> MemoryStore | MongoStore:
     uri = os.environ.get("MONGODB_URI")
-    return MongoStore(uri) if uri else MemoryStore()
+    if not uri:
+        return MemoryStore()
+    try:
+        return MongoStore(uri)
+    except Exception as e:
+        logging.getLogger(__name__).warning("MongoDB unavailable (%s); using in-memory store", e)
+        return MemoryStore()

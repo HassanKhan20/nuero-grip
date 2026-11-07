@@ -76,3 +76,10 @@ def test_trigger_feedback_sends_commands():
     tools = _tools()
     tools.trigger_feedback("correct_posture", "drop your shoulder")
     assert "B,300,400\n" in tools.engine.source.sent and "L,R\n" in tools.engine.source.sent
+
+
+def test_nvidia_client_has_short_timeout(monkeypatch):
+    from neurogrip.agent import make_nvidia_client
+    monkeypatch.setenv("NVIDIA_API_KEY", "x")
+    c = make_nvidia_client()
+    assert c.timeout == 45 and c.max_retries == 1

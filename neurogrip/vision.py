@@ -1,4 +1,5 @@
 """Healthy-hand tracking (finger curls) and compensatory motion detection."""
+import logging
 import math
 import threading
 import time
@@ -12,6 +13,7 @@ FINGER_RANGE = 1.0        # ratio drop from open to fist
 THUMB_OPEN_RATIO = 1.3    # thumb-tip-to-pinky-mcp / wrist-to-middle-mcp when open
 THUMB_RANGE = 0.7
 
+STALE_S = 0.5  # camera result older than this = no hand
 FINGERS = {"index": (5, 8), "middle": (9, 12), "ring": (13, 16), "pinky": (17, 20)}
 
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
@@ -105,6 +107,7 @@ class CameraVision:
     def __init__(self, camera_index: int = 0):
         self.camera_index = camera_index
         self._result = VisionResult(None, [])
+        self._result_at = 0.0
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -117,11 +120,23 @@ class CameraVision:
     def stop(self) -> None:
         self._stop.set()
 
+    def _set(self, result: VisionResult) -> None:
+        with self._lock:
+            self._result, self._result_at = result, time.monotonic()
+
     def latest(self, t_ms: int | None = None) -> VisionResult:
         with self._lock:
+            if time.monotonic() - self._result_at > STALE_S:
+                return VisionResult(None, [])  # frozen/unplugged camera must not keep a target alive
             return self._result
 
     def _run(self) -> None:
+        try:
+            self._loop()
+        except Exception:
+            logging.getLogger(__name__).exception("camera vision thread crashed")
+
+    def _loop(self) -> None:
         import cv2
         import mediapipe as mp
         from mediapipe.tasks.python import BaseOptions
@@ -150,8 +165,7 @@ class CameraVision:
                 pl = p.pose_landmarks[0]
                 if min(pl[11].visibility or 0, pl[12].visibility or 0) > 0.5:
                     pose_pts = {"l_sh": (pl[11].x, pl[11].y), "r_sh": (pl[12].x, pl[12].y)}
-            with self._lock:
-                self._result = VisionResult(curls, self.comp.update(pose_pts))
+            self._set(VisionResult(curls, self.comp.update(pose_pts)))
         cap.release()
 
 

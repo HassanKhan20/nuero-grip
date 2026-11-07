@@ -1,10 +1,14 @@
 """Sensor frame sources: real ESP32 over serial, or synthetic mock data."""
+import logging
 import math
 import random
+import time
 
 from .protocol import SensorFrame, parse_sensor_line
 
 FRAME_MS = 20  # 50 Hz
+RECONNECT_DELAY_S = 1.0
+log = logging.getLogger(__name__)
 
 
 class MockSource:
@@ -36,16 +40,42 @@ class MockSource:
 
 class SerialSource:
     def __init__(self, port: str, baud: int = 115200):
+        self.port, self.baud = port, baud
+        self.ser = self._open()
+
+    def _open(self):
         import serial
 
-        self.ser = serial.Serial(port, baud, timeout=1)
+        return serial.Serial(self.port, self.baud, timeout=1)
+
+    def _reconnect(self) -> None:
+        try:
+            self.ser.close()
+        except Exception:
+            pass
+        while True:
+            time.sleep(RECONNECT_DELAY_S)
+            try:
+                self.ser = self._open()
+                log.info("serial reconnected on %s", self.port)
+                return
+            except Exception as e:
+                log.warning("serial reconnect failed: %s", e)
 
     def read(self) -> SensorFrame:
         while True:
-            line = self.ser.readline().decode("ascii", errors="ignore")
-            frame = parse_sensor_line(line)
+            try:
+                raw = self.ser.readline()
+            except Exception as e:  # SerialException / OSError when the cable is pulled
+                log.warning("serial read failed (%s); reconnecting", e)
+                self._reconnect()
+                continue
+            frame = parse_sensor_line(raw.decode("ascii", errors="ignore"))
             if frame is not None:
                 return frame
 
     def send(self, cmd: str) -> None:
-        self.ser.write(cmd.encode("ascii"))
+        try:
+            self.ser.write(cmd.encode("ascii"))
+        except Exception as e:
+            log.warning("serial write failed: %s", e)

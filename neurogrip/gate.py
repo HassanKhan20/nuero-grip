@@ -6,7 +6,6 @@ from .protocol import SERVO_MAX
 from .vision import VisionResult
 
 THRESHOLDS = [0.08, 0.11, 0.14, 0.17, 0.20]  # intent threshold per difficulty level 1-5
-MIN_TARGET_CURL = 0.1
 
 
 @dataclass
@@ -24,7 +23,7 @@ class Gate:
 
     def step(self, intent: IntentState, vision: VisionResult) -> GateOutput:
         curls = vision.curls
-        target_set = curls is not None and max(curls.values()) >= MIN_TARGET_CURL
+        target_set = curls is not None  # an open healthy hand is a valid target: it releases the grip
         compensating = bool(vision.compensation)
         is_open = intent.active and not compensating and target_set
         if is_open:

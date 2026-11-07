@@ -14,7 +14,7 @@
 const int PIN_TOUCH_TEMPLE  = T0;   // GPIO4
 const int PIN_TOUCH_FOREARM = T3;   // GPIO15
 const int PIN_SERVO_THUMB   = 13;
-const int PIN_SERVO_INDEX   = 12;
+const int PIN_SERVO_INDEX   = 18;   // not GPIO12: boot strapping pin
 const int PIN_SERVO_REST    = 14;
 const int PIN_BUZZER        = 25;
 const int PIN_LED_GREEN     = 26;

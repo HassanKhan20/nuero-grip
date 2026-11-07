@@ -2,6 +2,7 @@
 import logging
 import math
 import os
+import queue
 import threading
 import time
 from collections import deque
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 
 MODES = ["stroke", "parkinsons", "phantom", "cp", "cognitive"]
 DEFAULT_LEVEL = 3
+SENSOR_TIMEOUT_S = 1.0
 
 
 class Engine:
@@ -35,6 +37,9 @@ class Engine:
         self._frames = 0
         self._t_ms = 0
         self._last_led: str | None = None
+        self._last_frame_at = 0.0
+        self._outbox: queue.Queue = queue.Queue(maxsize=1000)
+        self._writer: threading.Thread | None = None
         self._lock = threading.RLock()
         self._live = {"angles": (0, 0, 0), "gate_open": False, "intent_strength": 0.0,
                       "intent_active": False, "calibrated": False, "curls": None, "led": "O",
@@ -46,6 +51,7 @@ class Engine:
 
     def step(self) -> dict:
         f = self.source.read()
+        self._last_frame_at = time.monotonic()
         with self._lock:
             self._t_ms = f.ms
             istate = self.intent.update(f)
@@ -68,16 +74,35 @@ class Engine:
                 self.metrics.steadiness = steadiness(arr)
 
             for e in events:
-                self.store.log_event({**e, "patient_id": self.patient_id, "mode": self.mode})
+                self._persist({**e, "patient_id": self.patient_id, "mode": self.mode})
             self.new_events.extend(events)
             self._live = {"angles": g.angles, "gate_open": g.open, "intent_strength": round(istate.strength, 2),
                           "intent_active": istate.active, "calibrated": istate.calibrated,
                           "curls": v.curls, "led": g.led, "compensation": list(v.compensation)}
             return self._live
 
+    def _persist(self, doc: dict) -> None:
+        """Queue an event for the store; a slow or dead database must never stall the servo loop."""
+        if self._writer is None:
+            self._writer = threading.Thread(target=self._write_events, daemon=True)
+            self._writer.start()
+        try:
+            self._outbox.put_nowait(doc)
+        except queue.Full:
+            log.warning("event queue full; dropping event")
+
+    def _write_events(self) -> None:
+        while True:
+            doc = self._outbox.get()
+            try:
+                self.store.log_event(doc)
+            except Exception as e:
+                log.warning("could not store event: %s", e)
+
     def state(self) -> dict:
         with self._lock:
-            return {**self.metrics.snapshot(), **self._live, "mode": self.mode, "patient_id": self.patient_id}
+            return {**self.metrics.snapshot(), **self._live, "mode": self.mode, "patient_id": self.patient_id,
+                    "sensors_ok": time.monotonic() - self._last_frame_at < SENSOR_TIMEOUT_S}
 
     def set_difficulty(self, level: int) -> int:
         level = max(1, min(5, int(level)))
@@ -102,9 +127,8 @@ class Engine:
     def end_session(self) -> str:
         with self._lock:
             doc = {"patient_id": self.patient_id, "mode": self.mode, **self.metrics.snapshot()}
-            session_id = self.store.save_session(doc)
             self.metrics = SessionMetrics(difficulty=self.metrics.difficulty)
-            return session_id
+        return self.store.save_session(doc)  # outside the lock: network I/O
 
     def run_forever(self, stop: threading.Event) -> None:
         self.vision.start()
