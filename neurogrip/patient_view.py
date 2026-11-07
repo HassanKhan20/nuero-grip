@@ -3,7 +3,7 @@ import json
 import os
 
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
-KEEP = ("reps", "activation_rate", "compensation_count", "latency_ms_mean", "tremor_hz", "steadiness", "difficulty", "mode")
+KEEP = ("reps", "activation_rate", "session_s", "latency_ms_mean", "tremor_hz", "steadiness", "difficulty", "mode")
 
 PROMPT = """You are a friendly rehab assistant explaining a patient's progress in simple language.
 Explain in 2-3 sentences what they did today, whether they improved compared with last time, and one encouraging
@@ -11,8 +11,7 @@ thing to focus on next time. No medical jargon, no diagnosis, no numbers they wo
 Talk like a supportive coach, speaking directly to them ("you").
 
 What the numbers mean: reps = hand movements completed; activation_rate = % of the time their own effort was strong
-enough to move the robotic hand (higher is better); compensation_count = times they leaned or lifted a shoulder
-instead of using the hand (lower is better); latency_ms_mean = reaction time (lower is better);
+enough to move the robotic hand (higher is better); session_s = seconds they practised; latency_ms_mean = reaction time (lower is better);
 steadiness = 0-100 (higher is steadier); difficulty = level 1-5.
 
 Today's session: {today}

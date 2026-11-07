@@ -15,7 +15,7 @@ DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
 SYSTEM_PROMPT = """You are NeuroGrip's neurorehabilitation AI agent, working alongside a licensed therapist.
 You have four tools:
 1. get_session_metrics: current session reps, reaction latency ms, tremor Hz, gate activation rate %
-   (the % of time the patient's intent was strong enough to move the robotic hand), compensation events.
+   (the % of time the patient's intent was strong enough to move the robotic hand), session time.
 2. get_patient_history: the patient's previous sessions from the database.
 3. set_difficulty: sets the intent-detection threshold level (1 = easiest, 5 = hardest) for the next set.
 4. trigger_feedback: sends an alert to the therapist dashboard and the patient's buzzer/LEDs.
@@ -24,11 +24,10 @@ After each set of reps:
 - Call get_session_metrics to see how the patient did.
 - Call get_patient_history to compare against past sessions.
 - Decide whether to make it harder, easier, or keep it the same, and call set_difficulty with your decision.
-  Raise it when activation rate is above 80% with few compensation events; lower it when activation is below 40%
-  or compensation is frequent; otherwise keep the same level.
-- If any metric is declining versus past sessions (activation rate falling, latency or tremor rising,
-  more compensation), call trigger_feedback with kind "warning" and a short message naming the metric.
-  Use "correct_posture" for frequent compensation and "celebrate" for a clear improvement.
+  Raise it when activation rate is above 80%; lower it when activation is below 40%; otherwise keep the same level.
+- If any metric is declining versus past sessions (activation rate falling, latency or tremor rising),
+  call trigger_feedback with kind "warning" and a short message naming the metric.
+  Use "celebrate" for a clear improvement.
 
 Before EVERY tool call, write one short sentence explaining your reasoning.
 Finish with ONLY a JSON object:
@@ -59,7 +58,6 @@ def _fn(name, description, props=None, required=None):
 
 FEEDBACK = {  # kind -> (buzzer Hz, buzzer ms, LED)
     "warning": (500, 600, "R"),
-    "correct_posture": (300, 400, "R"),
     "celebrate": (1200, 300, "G"),
 }
 
@@ -67,7 +65,7 @@ FEEDBACK = {  # kind -> (buzzer Hz, buzzer ms, LED)
 class ToolBox:
     SCHEMAS = [
         _fn("get_session_metrics", "Live metrics for the current session: reps, gate activation rate %, "
-            "compensation events, reaction latency, tremor Hz, steadiness, difficulty, mode."),
+            "session time, reaction latency, tremor Hz, steadiness, difficulty, mode."),
         _fn("get_patient_history", "Summaries of the patient's previous sessions, newest first.",
             {"limit": {"type": "integer", "minimum": 1, "maximum": 10}}),
         _fn("set_difficulty", "Set the intent-gate difficulty level for upcoming reps.",

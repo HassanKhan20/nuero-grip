@@ -11,15 +11,14 @@ TREND_DELTA = 5  # activation-rate points (first -> last session) that count as 
 TRIAGE_PROMPT = """You are a patient triage AI for a neuro-rehabilitation clinic, so no patient is overlooked.
 You receive a JSON list of patients. Per patient: name, condition, latency_ms_mean (reaction latency),
 tremor_hz (0 = none), activation_rate_trend (gate activation % over their last 5 sessions, oldest first:
-the % of time their intent was strong enough to move the robotic hand), compensation_per_session,
+the % of time their intent was strong enough to move the robotic hand),
 last_session_days_ago, and trend (improving / declining / stable).
 
 For EVERY patient:
 - Assign urgency: "URGENT", "MONITOR", or "STABLE".
 - Give ONE sentence explaining why, citing the numbers.
 - Anyone with no session in 3+ days, or a declining trend, is URGENT.
-- MONITOR patients who are not urgent but show a concern: tremor present, reaction latency above 1000 ms,
-  or 5+ compensation events per session.
+- MONITOR patients who are not urgent but show a concern: tremor present or reaction latency above 1000 ms.
 
 Sort by urgency (URGENT first). Reply with ONLY a JSON array:
 [{"patient_id": "...", "urgency": "URGENT", "reason": "..."}]"""
@@ -36,19 +35,19 @@ def trend_of(series: list[float]) -> str:
 
 def seed_demo_patients() -> list[dict]:
     rows = [
-        ("P-101", "Avery M.", "stroke", 2, [42, 48, 55, 61, 66], 0.0, 820, 3),
-        ("P-102", "Jordan K.", "parkinsons", 9, [70, 64, 55, 49, 41], 5.8, 910, 6),
-        ("P-103", "Riley S.", "cp", 1, [35, 38, 40, 44, 47], 0.0, 1020, 5),
-        ("P-104", "Morgan T.", "stroke", 14, [58, 51, 44, 38, 30], 0.0, 1180, 9),
-        ("P-105", "Casey L.", "phantom", 1, [60, 62, 63, 65, 64], 0.0, 760, 1),
-        ("P-106", "Quinn R.", "cognitive", 2, [72, 71, 70, 69, 70], 0.0, 1340, 2),
-        ("P-107", "Taylor B.", "parkinsons", 2, [55, 56, 54, 57, 58], 4.6, 880, 2),
-        ("P-108", "Drew P.", "stroke", 2, [50, 49, 47, 46, 44], 0.0, 990, 7),
-        ("P-109", "Skyler N.", "cp", 1, [28, 33, 39, 45, 52], 0.0, 1100, 4),
-        ("P-110", "Emerson H.", "cognitive", 21, [68, 66, 63, 59, 56], 0.0, 1520, 3),
+        ("P-101", "Avery M.", "stroke", 2, [42, 48, 55, 61, 66], 0.0, 820),
+        ("P-102", "Jordan K.", "parkinsons", 9, [70, 64, 55, 49, 41], 5.8, 910),
+        ("P-103", "Riley S.", "cp", 1, [35, 38, 40, 44, 47], 0.0, 1020),
+        ("P-104", "Morgan T.", "stroke", 14, [58, 51, 44, 38, 30], 0.0, 1180),
+        ("P-105", "Casey L.", "phantom", 1, [60, 62, 63, 65, 64], 0.0, 760),
+        ("P-106", "Quinn R.", "cognitive", 2, [72, 71, 70, 69, 70], 0.0, 1340),
+        ("P-107", "Taylor B.", "parkinsons", 2, [55, 56, 54, 57, 58], 4.6, 880),
+        ("P-108", "Drew P.", "stroke", 2, [50, 49, 47, 46, 44], 0.0, 990),
+        ("P-109", "Skyler N.", "cp", 1, [28, 33, 39, 45, 52], 0.0, 1100),
+        ("P-110", "Emerson H.", "cognitive", 21, [68, 66, 63, 59, 56], 0.0, 1520),
     ]
     keys = ["patient_id", "name", "condition", "last_session_days_ago", "activation_rate_trend",
-            "tremor_hz", "latency_ms_mean", "compensation_per_session"]
+            "tremor_hz", "latency_ms_mean"]
     patients = [dict(zip(keys, r)) for r in rows]
     for p in patients:
         p["trend"] = trend_of(p["activation_rate_trend"])

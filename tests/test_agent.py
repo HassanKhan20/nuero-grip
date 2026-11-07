@@ -103,8 +103,9 @@ def test_agent_stops_at_max_steps():
 
 def test_trigger_feedback_sends_commands():
     tools = _tools()
-    tools.trigger_feedback("correct_posture", "drop your shoulder")
-    assert "B,300,400\n" in tools.engine.source.sent and "L,R\n" in tools.engine.source.sent
+    tools.trigger_feedback("celebrate", "best activation rate yet")
+    assert "B,1200,300\n" in tools.engine.source.sent and "L,G\n" in tools.engine.source.sent
+    assert "error" in tools.trigger_feedback("correct_posture", "x")
 
 
 def test_nvidia_client_has_short_timeout(monkeypatch):
