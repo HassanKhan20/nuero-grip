@@ -8,11 +8,11 @@ IDLE = IntentState(True, False, 0.0, 0.0, 0.0)
 
 
 def _v(curl, comp=()):
-    return VisionResult({"thumb": curl, "index": curl, "rest": curl}, list(comp))
+    return VisionResult(dict.fromkeys(("thumb", "index", "middle", "ring", "pinky"), curl), list(comp))
 
 
 def _g(open_, target=True):
-    return GateOutput(open=open_, target_set=target, angles=(0, 0, 0), led="O", buzzer_hz=0)
+    return GateOutput(open=open_, target_set=target, angles=(0, 0, 0, 0, 0), led="O", buzzer_hz=0)
 
 
 def test_rep_counted_with_hysteresis():

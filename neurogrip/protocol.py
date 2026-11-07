@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 
 SERVO_MAX = 160
+FINGERS = ("thumb", "index", "middle", "ring", "pinky")  # servo order on the wire
 
 
 @dataclass
@@ -28,8 +29,8 @@ def _clamp(v: int) -> int:
     return max(0, min(SERVO_MAX, int(v)))
 
 
-def fmt_servo(thumb: int, index: int, rest: int) -> str:
-    return f"A,{_clamp(thumb)},{_clamp(index)},{_clamp(rest)}\n"
+def fmt_servo(thumb: int, index: int, middle: int, ring: int, pinky: int) -> str:
+    return "A," + ",".join(str(_clamp(a)) for a in (thumb, index, middle, ring, pinky)) + "\n"
 
 
 def fmt_buzzer(hz: int, ms: int) -> str:

@@ -17,13 +17,21 @@ def _hand(open_hand: bool):
 OPEN, FIST = _hand(True), _hand(False)
 
 
+def test_finger_curls_are_independent():
+    lm = list(FIST)
+    lm[8] = OPEN[8]  # only the index finger extended
+    c = finger_curls(lm)
+    assert c["index"] < 0.1 and c["middle"] > 0.9 and c["pinky"] > 0.9
+
+
 def test_open_hand_curls_low():
     assert all(v < 0.1 for v in finger_curls(OPEN).values())
 
 
 def test_fist_curls_high():
     c = finger_curls(FIST)
-    assert c["thumb"] > 0.9 and c["index"] > 0.9 and c["rest"] > 0.9
+    assert set(c) == {"thumb", "index", "middle", "ring", "pinky"}
+    assert all(v > 0.9 for v in c.values())
 
 
 def test_shoulder_hike_detected():
@@ -56,7 +64,7 @@ def test_camera_result_goes_stale():
     import time
     from neurogrip.vision import CameraVision, VisionResult
     cam = CameraVision(0)  # not started
-    cam._set(VisionResult({"thumb": 1, "index": 1, "rest": 1}, []))
+    cam._set(VisionResult(dict.fromkeys(("thumb", "index", "middle", "ring", "pinky"), 1), []))
     assert cam.latest().curls is not None
     cam._result_at = time.monotonic() - 1
     assert cam.latest().curls is None

@@ -2,9 +2,9 @@
 // Streams touch + accelerometer at 50 Hz, accepts servo/buzzer/LED commands.
 // Protocol (115200 baud, newline-terminated):
 //   out: S,<ms>,<temple>,<forearm>,<ax_mg>,<ay_mg>,<az_mg>
-//   in:  A,<thumb>,<index>,<rest>   servo degrees (clamped 0-160)
-//        B,<hz>,<ms>                buzzer tone
-//        L,<G|R|O>                  LEDs green / red / off
+//   in:  A,<thumb>,<index>,<middle>,<ring>,<pinky>   servo degrees (clamped 0-160)
+//        B,<hz>,<ms>                                 buzzer tone
+//        L,<G|R|O>                                   LEDs green / red / off
 // Safety: no A command for 500 ms -> all servos return to 0 (open hand).
 
 #include <Wire.h>
@@ -13,9 +13,13 @@
 // ---- pins (classic ESP32 DevKit; edit to match your wiring) ----
 const int PIN_TOUCH_TEMPLE  = T0;   // GPIO4
 const int PIN_TOUCH_FOREARM = T3;   // GPIO15
+// One servo per finger. Avoids strapping pins (0, 2, 5, 12, 15), flash pins (6-11),
+// input-only pins (34-39), touch pins in use (4, 15) and I2C (21, 22).
 const int PIN_SERVO_THUMB   = 13;
-const int PIN_SERVO_INDEX   = 18;   // not GPIO12: boot strapping pin
-const int PIN_SERVO_REST    = 14;
+const int PIN_SERVO_INDEX   = 18;
+const int PIN_SERVO_MIDDLE  = 19;
+const int PIN_SERVO_RING    = 23;
+const int PIN_SERVO_PINKY   = 33;
 const int PIN_BUZZER        = 25;
 const int PIN_LED_GREEN     = 26;
 const int PIN_LED_RED       = 27;
@@ -26,8 +30,10 @@ const int SERVO_MAX = 160;
 const unsigned long SAMPLE_MS = 20;      // 50 Hz
 const unsigned long WATCHDOG_MS = 500;
 
-Servo servos[3];
-const int servoPins[3] = {PIN_SERVO_THUMB, PIN_SERVO_INDEX, PIN_SERVO_REST};
+const int NUM_SERVOS = 5;
+Servo servos[NUM_SERVOS];
+const int servoPins[NUM_SERVOS] = {PIN_SERVO_THUMB, PIN_SERVO_INDEX, PIN_SERVO_MIDDLE,
+                                   PIN_SERVO_RING, PIN_SERVO_PINKY};
 
 unsigned long lastSample = 0;
 unsigned long lastServoCmd = 0;
@@ -58,9 +64,13 @@ void adxlRead(int &x, int &y, int &z) {
   z = (int)(v[2] * 3.9f);
 }
 
-void setServos(int a, int b, int c) {
-  int vals[3] = {a, b, c};
-  for (int i = 0; i < 3; i++) servos[i].write(constrain(vals[i], 0, SERVO_MAX));
+void setServos(const int *vals) {
+  for (int i = 0; i < NUM_SERVOS; i++) servos[i].write(constrain(vals[i], 0, SERVO_MAX));
+}
+
+void servosNeutralPosition() {
+  const int zeros[NUM_SERVOS] = {0, 0, 0, 0, 0};
+  setServos(zeros);
 }
 
 void setLeds(char s) {
@@ -70,9 +80,9 @@ void setLeds(char s) {
 
 void handleLine(char *line) {
   if (line[0] == 'A') {
-    int a, b, c;
-    if (sscanf(line, "A,%d,%d,%d", &a, &b, &c) == 3) {
-      setServos(a, b, c);
+    int v[NUM_SERVOS];
+    if (sscanf(line, "A,%d,%d,%d,%d,%d", &v[0], &v[1], &v[2], &v[3], &v[4]) == NUM_SERVOS) {
+      setServos(v);
       lastServoCmd = millis();
       servosNeutral = false;
     }
@@ -112,11 +122,11 @@ void setup() {
   adxlWrite(0x31, 0x0B);  // DATA_FORMAT: full resolution, +/-16 g
   adxlWrite(0x2D, 0x08);  // POWER_CTL: measure
 
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < NUM_SERVOS; i++) {
     servos[i].setPeriodHertz(50);
     servos[i].attach(servoPins[i], 500, 2400);
   }
-  setServos(0, 0, 0);
+  servosNeutralPosition();
 }
 
 void loop() {
@@ -124,7 +134,7 @@ void loop() {
 
   unsigned long now = millis();
   if (!servosNeutral && now - lastServoCmd > WATCHDOG_MS) {
-    setServos(0, 0, 0);
+    servosNeutralPosition();
     setLeds('O');
     servosNeutral = true;
   }

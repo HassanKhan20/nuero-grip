@@ -57,7 +57,7 @@ class Engine:
         self._outbox: queue.Queue = queue.Queue(maxsize=1000)
         self._writer: threading.Thread | None = None
         self._lock = threading.RLock()
-        self._live = {"angles": (0, 0, 0), "gate_open": False, "intent_strength": 0.0,
+        self._live = {"angles": (0, 0, 0, 0, 0), "gate_open": False, "intent_strength": 0.0,
                       "intent_active": False, "calibrated": False, "curls": None, "led": "O",
                       "compensation": []}
 

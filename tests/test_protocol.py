@@ -12,7 +12,7 @@ def test_parse_garbage_returns_none():
 
 
 def test_fmt_servo_clamps():
-    assert fmt_servo(-5, 90, 200) == "A,0,90,160\n"
+    assert fmt_servo(-5, 90, 200, 45, 161) == "A,0,90,160,45,160\n"
 
 
 def test_fmt_led_and_buzzer():

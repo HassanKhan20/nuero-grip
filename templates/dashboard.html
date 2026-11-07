@@ -9,12 +9,15 @@
 </head>
 <body data-role="{{ role }}">
 <header class="topbar">
-  <div>
-    <h1 id="mode-title">Stroke Recovery</h1>
-    <span class="muted" id="conn">connecting…</span>
+  <div class="brand">
+    <span class="logo" aria-hidden="true">◉</span>
+    <div>
+      <h1 id="mode-title">Stroke Recovery</h1>
+      <p class="muted small"><span id="source-badge" class="badge">—</span> <span id="conn">connecting…</span></p>
+    </div>
   </div>
   <div class="topbar-right">
-    <label class="muted">Condition
+    <label class="muted small">Condition
       <select id="mode-select">
         {% for m in modes %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
       </select>
@@ -25,33 +28,93 @@
 </header>
 
 <main class="grid">
-  <section class="tile wide" data-metric="grip">
-    <h2>Robotic grip <span id="gate-status" class="pill">—</span></h2>
-    <div class="bars">
-      <div class="bar"><span>Thumb</span><div class="track"><div id="bar-thumb" class="fill"></div></div><b id="ang-thumb">0°</b></div>
-      <div class="bar"><span>Index</span><div class="track"><div id="bar-index" class="fill"></div></div><b id="ang-index">0°</b></div>
-      <div class="bar"><span>Rest</span><div class="track"><div id="bar-rest" class="fill"></div></div><b id="ang-rest">0°</b></div>
+  <!-- HERO: healthy hand (camera) → gate → robotic hand -->
+  <section class="tile hero-cam" data-metric="grip">
+    <h2>Healthy hand <span class="muted">camera</span></h2>
+    <div class="cam-frame">
+      <img id="cam" alt="Live camera with hand skeleton" hidden>
+      <div id="cam-placeholder" class="cam-placeholder">
+        <p id="cam-msg">Camera feed appears in camera mode</p>
+        <p class="muted small">Run with <code>NG_MODE=camera</code></p>
+      </div>
     </div>
-    <div class="bar intent"><span>Intent</span><div class="track"><div id="bar-intent" class="fill intent-fill"></div></div><b id="intent-val">0.00</b></div>
   </section>
 
-  <section class="tile" data-metric="reps"><h2>Reps</h2><div class="big" id="reps">0</div></section>
-  <section class="tile" data-metric="activation"><h2>Gate activation</h2><div class="big"><span id="activation">0</span>%</div>
-    <svg id="spark" class="spark" viewBox="0 0 120 30" preserveAspectRatio="none"><polyline id="spark-line" points=""/></svg></section>
+  <section class="tile hero-robot" data-metric="grip">
+    <h2>Robotic hand <span id="gate-status" class="pill">—</span></h2>
+    <div id="hand" class="hand-wrap"></div>
+    <div class="bars">
+      {% for f in ['thumb', 'index', 'middle', 'ring', 'pinky'] %}
+      <div class="bar"><span>{{ f|capitalize }}</span><div class="track"><div id="bar-{{ f }}" class="fill"></div></div><b id="ang-{{ f }}">0°</b></div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="tile hero-intent" data-metric="intent">
+    <h2>Motor intent</h2>
+    <div class="bar intent"><span>Strength</span><div class="track"><div id="bar-intent" class="fill intent-fill"></div></div><b id="intent-val">0.00</b></div>
+    <p id="intent-label" class="intent-label muted">Calibrating…</p>
+    <div id="sim-intent">
+      <button id="btn-hold" class="hold">Hold to try</button>
+      <p class="muted small">or hold <kbd>Space</kbd>. This stands in for the headband.</p>
+      <label class="switch"><input type="checkbox" id="auto-intent"> Auto (3 s try / 3 s rest)</label>
+    </div>
+    <p id="hw-intent" class="muted small" hidden>Intent comes from the capacitive headband (temple + forearm).</p>
+    {% if role == 'therapist' %}
+    <div class="difficulty" data-metric="difficulty">
+      <span class="muted small">Difficulty</span>
+      <div class="stepper"><button id="diff-down" aria-label="Easier">−</button><span class="big" id="difficulty">3</span><button id="diff-up" aria-label="Harder">+</button></div>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- METRICS -->
+  <section class="tile" data-metric="reps"><h2>Reps</h2><div class="big" id="reps">0</div><p class="muted small">full grip → release cycles</p></section>
+  <section class="tile" data-metric="activation">
+    <h2>Gate activation</h2><div class="big"><span id="activation">0</span><small>%</small></div>
+    <div class="spark-wrap">
+      <svg id="spark" class="spark" viewBox="0 0 120 32" preserveAspectRatio="none" aria-label="Gate activation over the last minute">
+        <line x1="0" y1="31" x2="120" y2="31" class="baseline"/><polyline id="spark-line" points=""/><circle id="spark-dot" r="2.5" hidden/>
+      </svg>
+      <div id="spark-tip" class="tip" hidden></div>
+    </div>
+    <p class="muted small">% of tries strong enough to move the hand</p>
+  </section>
+  <section class="tile" data-metric="tremor"><h2>Tremor</h2><div class="big"><span id="tremor">0.0</span><small> Hz</small></div>
+    <p class="muted small"><span id="tremor-src">—</span> · amplitude <span id="tremor-amp">0</span></p></section>
+  <section class="tile" data-metric="steadiness"><h2>Steadiness</h2><div class="big"><span id="steadiness">100</span><small>/100</small></div></section>
+  <section class="tile" data-metric="latency"><h2>Reaction time</h2><div class="big"><span id="latency">—</span><small> ms</small></div>
+    <p class="muted small">mean of <span id="latency-trials">0</span> trials</p></section>
+  <section class="tile" data-metric="compensation"><h2>Compensation</h2><div class="big" id="comp-count">0</div><p class="muted small">shoulder hike / trunk lean events</p></section>
 
   {% if role == 'therapist' %}
-  <section class="tile" data-metric="tremor"><h2>Tremor</h2><div class="big"><span id="tremor">0</span> Hz</div><p class="muted small">4–6 Hz is the typical Parkinson's range</p></section>
-  <section class="tile" data-metric="steadiness"><h2>Steadiness</h2><div class="big" id="steadiness">100</div></section>
-  <section class="tile" data-metric="latency"><h2>Reaction latency</h2><div class="big"><span id="latency">—</span> ms</div>
-    <p class="muted small"><span id="latency-trials">0</span> trials</p>
-    <button id="btn-cue">Cue reaction test</button></section>
-  <section class="tile" data-metric="difficulty"><h2>Difficulty</h2>
-    <div class="stepper"><button id="diff-down">−</button><span class="big" id="difficulty">3</span><button id="diff-up">+</button></div>
-    <p class="muted small">Higher = stronger intent needed to open the gate</p></section>
-  <section class="tile" data-metric="compensation"><h2>Compensation</h2><div class="big" id="comp-count">0</div><p class="muted small">events this session</p></section>
+  <!-- CLINICAL TESTS -->
+  <section class="tile half" data-metric="parkinsons">
+    <h2>Parkinson's: finger-tap test</h2>
+    <p class="muted small">10 s of thumb–index tapping, scored from the camera (MDS-UPDRS 3.4 style). Screening indicator, not a diagnosis.</p>
+    <div class="row"><button id="btn-tap">Start finger-tap test</button></div>
+    <dl id="tap-results" class="results" hidden>
+      <div><dt>Taps</dt><dd id="tap-taps">—</dd></div>
+      <div><dt>Rate</dt><dd><span id="tap-rate">—</span> Hz</dd></div>
+      <div><dt>Amplitude decrement</dt><dd><span id="tap-dec">—</span>%</dd></div>
+      <div><dt>Rhythm variability</dt><dd id="tap-cv">—</dd></div>
+    </dl>
+    <p id="tap-flag" class="flag" hidden></p>
+  </section>
+
+  <section class="tile half" data-metric="cognitive">
+    <h2>Cognitive: reaction test</h2>
+    <p class="muted small">A cue appears after a random 1–3 s and the timer runs until the patient grips. Slowing across sessions is a screening signal.</p>
+    <div class="row"><button id="btn-cue">Start reaction test</button><span id="cue-status" class="muted small"></span></div>
+    <div class="trials-wrap">
+      <svg id="trials" class="trials" viewBox="0 0 200 60" preserveAspectRatio="none" aria-label="Last 10 reaction times"></svg>
+      <div id="trials-tip" class="tip" hidden></div>
+    </div>
+    <p class="muted small">Last 10 trials (ms)</p>
+  </section>
 
   <section class="tile wide">
-    <h2>Incident log <span class="muted small">(timestamped, live)</span></h2>
+    <h2>Incident log <span class="muted small">timestamped, live</span></h2>
     <ul id="event-log" class="log"></ul>
   </section>
 
@@ -59,20 +122,22 @@
     <h2>Nemotron session agent</h2>
     <div class="row"><button id="btn-agent">Run AI agent</button><button id="btn-end" class="secondary">End &amp; save session</button><span id="agent-status" class="muted"></span></div>
     <div id="agent-out" hidden>
-      <h3>Clinical summary</h3><p id="agent-summary"></p>
-      <h3>Next session plan</h3><p id="agent-plan"></p>
-      <h3>Agent trace <span class="muted small">(tool calls, in order)</span></h3>
-      <ol id="agent-trace" class="trace"></ol>
+      <div class="agent-cols">
+        <div><h3>Clinical summary</h3><p id="agent-summary"></p><h3>Next session plan</h3><p id="agent-plan"></p></div>
+        <div><h3>Agent trace <span class="muted small">tool calls, in order</span></h3><ol id="agent-trace" class="trace"></ol></div>
+      </div>
     </div>
   </section>
 
   <section class="tile wide">
-    <h2>Caseload triage <span class="muted small">(AI-flagged)</span></h2>
+    <h2>Caseload triage <span class="muted small">AI-flagged</span></h2>
     <div class="row"><button id="btn-triage">Run AI triage</button><span id="triage-status" class="muted"></span></div>
-    <table id="triage-table" class="triage" hidden>
-      <thead><tr><th>Urgency</th><th>Patient</th><th>Condition</th><th>Last seen</th><th>AI reason</th></tr></thead>
-      <tbody></tbody>
-    </table>
+    <div class="table-scroll">
+      <table id="triage-table" class="triage" hidden>
+        <thead><tr><th>Urgency</th><th>Patient</th><th>Condition</th><th>Last seen</th><th>AI reason</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
   {% else %}
   <section class="tile wide">
@@ -82,6 +147,15 @@
   </section>
   {% endif %}
 </main>
-<script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+
+<!-- Full-screen prompts the patient responds to -->
+<div id="cue-overlay" class="overlay cue" hidden><div><p class="overlay-big">SQUEEZE!</p><p>Close your hand now</p></div></div>
+<div id="tap-overlay" class="overlay tap" hidden><div>
+  <p class="overlay-big"><span id="tap-left">10</span>s</p>
+  <p>Tap your thumb and index finger together, as fast and as wide as you can</p>
+</div></div>
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="{{ url_for('static', filename='dashboard.js') }}"></script>
 </body>
 </html>

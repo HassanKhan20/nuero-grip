@@ -9,12 +9,16 @@ motor-intent rehabilitation platform. headband detects cognitive/motor intent, C
 py -3.10 -m venv .venv          # mediapipe needs Python 3.10–3.12
 .venv\Scripts\pip install -r requirements.txt
 
-# no hardware: synthetic sensors + hand (demo backup)
-$env:NG_MOCK = "1"
+# camera mode (default): real webcam CV, no ESP32. Hold the button or Space for intent
+$env:NG_MODE = "camera"
 .venv\Scripts\python app.py      # http://localhost:5000  (therapist/therapist, patient/patient)
 
-# real hardware
-Remove-Item Env:NG_MOCK
+# mock mode: no camera, no hardware, everything synthetic (demo backup)
+$env:NG_MODE = "mock"
+.venv\Scripts\python app.py
+
+# hardware mode: ESP32 headband + wristband + 5 servos
+$env:NG_MODE = "hardware"
 $env:NG_SERIAL_PORT = "COM5"     # ESP32 port (Device Manager)
 $env:NG_CAMERA = "0"             # webcam index
 .venv\Scripts\python app.py

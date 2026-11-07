@@ -34,11 +34,9 @@ def finger_curls(lm: list[tuple[float, float]]) -> dict[str, float]:
         r = d(lm[tip], lm[0]) / max(d(lm[mcp], lm[0]), 1e-6)
         curls[name] = _clamp01((FINGER_OPEN_RATIO - r) / FINGER_RANGE)
     r_thumb = d(lm[4], lm[17]) / max(d(lm[0], lm[9]), 1e-6)
-    return {
-        "thumb": round(_clamp01((THUMB_OPEN_RATIO - r_thumb) / THUMB_RANGE), 3),
-        "index": round(curls["index"], 3),
-        "rest": round((curls["middle"] + curls["ring"] + curls["pinky"]) / 3, 3),
-    }
+    out = {"thumb": round(_clamp01((THUMB_OPEN_RATIO - r_thumb) / THUMB_RANGE), 3)}
+    out.update({k: round(v, 3) for k, v in curls.items()})
+    return out
 
 
 class CompensationDetector:
@@ -97,12 +95,14 @@ class MockVision:
     def latest(self, t_ms: int | None = None) -> VisionResult:
         t = time.monotonic() * 1000 if t_ms is None else t_ms
         s = t / 1000
-        c = round(0.5 - 0.5 * math.cos(2 * math.pi * t / 4000), 3)
+        # fingers close in a slight wave (thumb leads, pinky lags) so each servo visibly moves on its own
+        curls = {k: round(0.5 - 0.5 * math.cos(2 * math.pi * (t - 120 * i) / 4000), 3)
+                 for i, k in enumerate(("thumb", "index", "middle", "ring", "pinky"))}
         comp = ["shoulder_hike"] if 10000 <= t % 15000 < 11000 else []
         wrist = (0.5 + 0.004 * math.sin(2 * math.pi * self.tremor_hz * s), 0.6)
         fatigue = max(0.35, 1 - 0.05 * (s % 30))  # tapping amplitude decays: bradykinesia demo
         pinch = round(0.15 + 0.6 * fatigue * (0.5 + 0.5 * math.sin(2 * math.pi * 2.2 * s)), 4)
-        return VisionResult({"thumb": c, "index": c, "rest": c}, comp, pinch, wrist, int(t // 33), s)
+        return VisionResult(curls, comp, pinch, wrist, int(t // 33), s)
 
     def jpeg(self) -> bytes | None:
         return None

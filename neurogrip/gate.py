@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 
 from .intent import IntentState
-from .protocol import SERVO_MAX
+from .protocol import FINGERS, SERVO_MAX
 from .vision import VisionResult
 
 THRESHOLDS = [0.08, 0.11, 0.14, 0.17, 0.20]  # intent threshold per difficulty level 1-5
@@ -12,14 +12,14 @@ THRESHOLDS = [0.08, 0.11, 0.14, 0.17, 0.20]  # intent threshold per difficulty l
 class GateOutput:
     open: bool
     target_set: bool
-    angles: tuple[int, int, int]
+    angles: tuple[int, ...]  # one per finger, in FINGERS order
     led: str
     buzzer_hz: int
 
 
 class Gate:
     def __init__(self):
-        self.angles: tuple[int, int, int] = (0, 0, 0)
+        self.angles: tuple[int, ...] = (0,) * len(FINGERS)
 
     def step(self, intent: IntentState, vision: VisionResult) -> GateOutput:
         curls = vision.curls
@@ -27,7 +27,7 @@ class Gate:
         compensating = bool(vision.compensation)
         is_open = intent.active and not compensating and target_set
         if is_open:
-            self.angles = tuple(round(curls[k] * SERVO_MAX) for k in ("thumb", "index", "rest"))
+            self.angles = tuple(round(curls[k] * SERVO_MAX) for k in FINGERS)
         led = "R" if compensating else "G" if is_open else "O"
         buzzer = 400 + int(800 * intent.strength) if intent.active else 0
         return GateOutput(is_open, target_set, self.angles, led, buzzer)
