@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NeuroGrip Login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-page">
+  <form class="login-card" method="post">
+    <h1>NeuroGrip</h1>
+    <p class="muted">Motor-intent rehabilitation command center</p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <label>Username <input name="username" autocomplete="username" required autofocus></label>
+    <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit">Sign in</button>
+    <p class="muted small">Demo: therapist / therapist · patient / patient</p>
+  </form>
+</body>
+</html>

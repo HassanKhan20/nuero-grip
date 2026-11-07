@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NeuroGrip Command Center</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body data-role="{{ role }}">
+<header class="topbar">
+  <div>
+    <h1 id="mode-title">Stroke Recovery</h1>
+    <span class="muted" id="conn">connecting…</span>
+  </div>
+  <div class="topbar-right">
+    <label class="muted">Condition
+      <select id="mode-select">
+        {% for m in modes %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+      </select>
+    </label>
+    <span class="role-badge">{{ role }}</span>
+    <a href="/logout">Log out</a>
+  </div>
+</header>
+
+<main class="grid">
+  <section class="tile wide" data-metric="grip">
+    <h2>Robotic grip <span id="gate-status" class="pill">—</span></h2>
+    <div class="bars">
+      <div class="bar"><span>Thumb</span><div class="track"><div id="bar-thumb" class="fill"></div></div><b id="ang-thumb">0°</b></div>
+      <div class="bar"><span>Index</span><div class="track"><div id="bar-index" class="fill"></div></div><b id="ang-index">0°</b></div>
+      <div class="bar"><span>Rest</span><div class="track"><div id="bar-rest" class="fill"></div></div><b id="ang-rest">0°</b></div>
+    </div>
+    <div class="bar intent"><span>Intent</span><div class="track"><div id="bar-intent" class="fill intent-fill"></div></div><b id="intent-val">0.00</b></div>
+  </section>
+
+  <section class="tile" data-metric="reps"><h2>Reps</h2><div class="big" id="reps">0</div></section>
+  <section class="tile" data-metric="activation"><h2>Gate activation</h2><div class="big"><span id="activation">0</span>%</div>
+    <svg id="spark" class="spark" viewBox="0 0 120 30" preserveAspectRatio="none"><polyline id="spark-line" points=""/></svg></section>
+
+  {% if role == 'therapist' %}
+  <section class="tile" data-metric="tremor"><h2>Tremor</h2><div class="big"><span id="tremor">0</span> Hz</div><p class="muted small">4–6 Hz is the typical Parkinson's range</p></section>
+  <section class="tile" data-metric="steadiness"><h2>Steadiness</h2><div class="big" id="steadiness">100</div></section>
+  <section class="tile" data-metric="latency"><h2>Reaction latency</h2><div class="big"><span id="latency">—</span> ms</div>
+    <p class="muted small"><span id="latency-trials">0</span> trials</p>
+    <button id="btn-cue">Cue reaction test</button></section>
+  <section class="tile" data-metric="difficulty"><h2>Difficulty</h2>
+    <div class="stepper"><button id="diff-down">−</button><span class="big" id="difficulty">3</span><button id="diff-up">+</button></div>
+    <p class="muted small">Higher = stronger intent needed to open the gate</p></section>
+  <section class="tile" data-metric="compensation"><h2>Compensation</h2><div class="big" id="comp-count">0</div><p class="muted small">events this session</p></section>
+
+  <section class="tile wide">
+    <h2>Incident log <span class="muted small">(timestamped, live)</span></h2>
+    <ul id="event-log" class="log"></ul>
+  </section>
+
+  <section class="tile wide">
+    <h2>Nemotron session agent</h2>
+    <div class="row"><button id="btn-agent">Run AI agent</button><button id="btn-end" class="secondary">End &amp; save session</button><span id="agent-status" class="muted"></span></div>
+    <div id="agent-out" hidden>
+      <h3>Clinical summary</h3><p id="agent-summary"></p>
+      <h3>Next session plan</h3><p id="agent-plan"></p>
+      <h3>Agent trace <span class="muted small">(tool calls, in order)</span></h3>
+      <ol id="agent-trace" class="trace"></ol>
+    </div>
+  </section>
+
+  <section class="tile wide">
+    <h2>Caseload triage <span class="muted small">(AI-flagged)</span></h2>
+    <div class="row"><button id="btn-triage">Run AI triage</button><span id="triage-status" class="muted"></span></div>
+    <table id="triage-table" class="triage" hidden>
+      <thead><tr><th>Urgency</th><th>Patient</th><th>Condition</th><th>Last seen</th><th>AI reason</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+  {% else %}
+  <section class="tile wide">
+    <h2>How am I doing?</h2>
+    <div class="row"><button id="btn-explain">Explain my progress</button><span id="explain-status" class="muted"></span></div>
+    <p id="explain-text" class="explain"></p>
+  </section>
+  {% endif %}
+</main>
+<script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
