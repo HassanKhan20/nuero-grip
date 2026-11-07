@@ -16,7 +16,7 @@ def test_engine_mock_runs():
     assert s["reps"] >= 1
     assert any(c.startswith("A,") for c in e.source.sent)
     assert abs(s["tremor_hz"] - 5) < 0.6
-    for key in ["angles", "gate_open", "intent_strength", "curls", "led", "mode", "activation_rate", "events"]:
+    for key in ["angles", "gate_open", "intent_strength", "curls", "led", "mode", "activation_rate", "events", "session_s"]:
         assert key in s
 
 
@@ -93,12 +93,13 @@ class SlowFailingStore(MemoryStore):
 def test_slow_failing_store_does_not_stall_engine():
     import time
     e = Engine(MockSource(), MockVision(), SlowFailingStore())
-    e.metrics._prev_comp = set()
+    e.step()
+    e.cue_latency()
     t0 = time.monotonic()
-    for _ in range(600):  # mock vision emits a shoulder_hike event at ~10 s
+    for _ in range(300):  # the cue fires within 1-3 s and is persisted
         e.step()
     assert time.monotonic() - t0 < 0.9
-    assert any(ev["type"] == "shoulder_hike" for ev in e.new_events)
+    assert any(ev["type"] == "cue" for ev in e.new_events)
 
 
 def test_sensors_ok_reflects_frame_age():
@@ -177,7 +178,9 @@ def test_listener_exception_does_not_break_step():
     def bad(ev):
         raise RuntimeError("socket gone")
     e.listeners.append(bad)
-    for _ in range(600):
+    e.step()
+    e.cue_latency()
+    for _ in range(300):
         e.step()
     assert len(e.new_events) > 0
 
@@ -199,7 +202,7 @@ def test_intent_only_moves_hand_without_vision():
 
     class NoVision(MockVision):
         def latest(self, t_ms=None):
-            return VisionResult(None, [])
+            return VisionResult(None)
     e = Engine(MockSource(), NoVision(), MemoryStore())
     e.set_control("intent", "fist")
     for _ in range(400):
@@ -258,3 +261,10 @@ def test_hardware_defaults_to_intent_control():
     from neurogrip.engine import default_control
     assert default_control("hardware") == "intent"
     assert default_control("camera") == "mirror"
+
+
+def test_state_has_no_posture_keys():
+    e = _engine()
+    e.step()
+    s = e.state()
+    assert "compensation" not in s and "compensation_count" not in s

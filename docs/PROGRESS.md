@@ -4,7 +4,7 @@ _Last updated: 2026-11-07_
 
 ## Where we are
 
-**Every feature now works without the ESP32.** Camera mode uses the laptop webcam for real hand and pose tracking:
+**Every feature now works without the ESP32.** Camera mode uses the laptop webcam for real hand tracking:
 - An animated robotic hand on screen mirrors your hand, finger by finger.
 - Parkinson's tremor and the finger-tap test are measured from the video.
 - The reaction test is timed until the camera sees your grip.
@@ -43,14 +43,12 @@ To use the AI features, set these first. Without them the buttons show a clear e
 1. On the **Robotic hand** tile, click **Intent only**. The camera dims and says *Camera not used*.
 2. Pick a grip shape: **Fist**, **Pinch**, **Point**, or **Wave** (fingers close one after another, thumb to pinky, the flashiest one).
 3. **Hold Space**, or wear the headband in hardware mode. The intent line rises past the dashed threshold and the robotic hand closes smoothly. The harder you try, the further it closes; relax and it opens.
-4. Hike a shoulder mid-grip (in camera mode): the hand freezes and glows red.
 
 What to say: *"With only the headband's muscle signal, no camera, the hand closes when the patient tries and opens when they relax. That's for patients with no healthy hand to mirror."*
 
 ## Try it in camera mode
 1. Log in as therapist and hold your hand up to the webcam. A skeleton is drawn on the feed.
 2. **Hold Space** and open and close your hand. The robotic hand copies each finger. Let go of Space and it stops: that's the gate.
-3. Hike one shoulder while holding Space. The gate blocks, the hand glows red, and an incident is logged.
 4. Pick **Parkinson's**, click **Start finger-tap test**, then tap thumb and index for 10 s. You get taps, rate, amplitude decrement, rhythm and a screening flag.
 5. Pick **Cognitive** and click **Start reaction test**. Squeeze when "SQUEEZE!" appears.
 6. Pick **Phantom limb**. The robotic hand is shown mirrored, for mirror therapy.
@@ -61,8 +59,8 @@ What to say: *"With only the headband's muscle signal, no camera, the hand close
 ESP32 headband + wristband ──serial──▶ intent detector ─┐
 (or Hold-to-try / Space in camera mode)                 │
                                                         ├─▶ GATE ─▶ 5 servo angles ─▶ ESP32 (one servo per finger)
-webcam ─▶ MediaPipe hand + pose ─▶ 5 finger curls, ─────┘    │       + on-screen robotic hand
-(or MockVision)                    compensation,             │       + buzzer / LEDs
+webcam ─▶ MediaPipe hand ────────▶ 5 finger curls, ─────┘    │       + on-screen robotic hand
+(or MockVision)                                           │       + buzzer / LEDs
                                    wrist (tremor),           ▼
                                    pinch (tap test)   session metrics ─▶ MongoDB
                                                              │
@@ -76,10 +74,9 @@ webcam ─▶ MediaPipe hand + pose ─▶ 5 finger curls, ─────┘   
 - **Mirror camera:** each finger copies your healthy hand.
 - **Intent only:** intent strength closes the hand in the chosen grip shape, and no camera is needed. To start up as intent-only, set `NG_CONTROL=intent` and `NG_GRIP=wave`.
 
-**The gate rule (mirror mode):** the robot hand moves only when all three are true:
+**The gate rule (mirror mode):** the robot hand moves only when both are true:
 1. Intent is detected.
-2. Posture is clean (no shoulder hike or trunk lean).
-3. The camera sees the healthy hand.
+2. The camera sees the healthy hand.
 
 Each finger's servo angle = that finger's curl × 160°. Serial command: `A,<thumb>,<index>,<middle>,<ring>,<pinky>`.
 
@@ -92,7 +89,7 @@ Each finger's servo angle = that finger's curl × 160°. Serial command: `A,<thu
 | `neurogrip/sources.py` | Sensor input: real serial (auto-reconnects) or mock; `IntentControl` for hold-to-try |
 | `neurogrip/intent.py` | Dual-site capacitive intent detection, with self-calibration |
 | `neurogrip/signals.py` | Accelerometer tremor frequency and steadiness |
-| `neurogrip/vision.py` | Webcam: 5 finger curls, pinch, wrist, compensation, skeleton overlay |
+| `neurogrip/vision.py` | Webcam: 5 finger curls, pinch, wrist, skeleton overlay |
 | `neurogrip/clinical.py` | Camera tremor and finger-tap (bradykinesia) analysis |
 | `neurogrip/gate.py` | The gate rule plus difficulty thresholds |
 | `neurogrip/metrics.py` | Reps, activation rate, incidents, reaction latency (intent or grip) |
@@ -120,7 +117,7 @@ Each finger's servo angle = that finger's curl × 160°. Serial command: `A,<thu
 | Cognitive: reaction test with a random 1–3 s cue, full-screen SQUEEZE prompt and beep, timed to the camera-detected grip, last-10 trial chart | Overall |
 | Phantom-limb mode mirrors the robotic hand | Overall |
 | **5 servos, one per finger:** protocol, gate, firmware and UI updated | Hardware |
-| Gate plus proportional per-finger control; compensation detection | Hardware |
+| Gate plus proportional per-finger control | Hardware |
 | Gate activation rate (replaces bilateral symmetry), reps, incident log | Overall / Winstead |
 | Nemotron agent with 4 tools and a visible tool-call trace | NVIDIA |
 | Therapist and patient logins with different views; live timestamped incident log | Winstead |
@@ -169,6 +166,7 @@ Full wiring and test steps are in [`firmware/README.md`](../firmware/README.md).
 **Not tested yet:** the firmware hasn't been compiled on a real board. If the Arduino IDE shows an error, paste it to Hassan or Claude.
 
 ## Decisions worth knowing
+- **Posture tracking (shoulder hike, trunk lean) was removed.** It was unreliable and not core. The gate is now intent plus a visible hand, and the pose model no longer runs, so the camera loop is faster.
 - **"Bilateral symmetry" is now "gate activation rate":** the % of time the patient's intent was strong enough to move the robot. Symmetry would always read about 100%, because the servo copies the healthy hand.
 - **In camera mode the tremor reading comes from the camera** (wrist motion). In hardware mode it comes from the wristband accelerometer.
 - **In camera mode the reaction test is timed to a camera-detected grip.** In hardware mode it is timed to headband intent.
@@ -182,7 +180,7 @@ Full wiring and test steps are in [`firmware/README.md`](../firmware/README.md).
 - If the ESP32 resets in the middle of a reaction test, that trial can get stuck.
 
 ## Demo plan (draft)
-1. Log in as therapist and pick **Stroke**. Hold Space (or wear the headband) and grip: the robot hand follows each finger. Hike a shoulder and it blocks and logs an incident.
+1. Log in as therapist and pick **Stroke**. Hold Space (or wear the headband) and grip: the robot hand follows each finger. Let go and it stops.
 2. Pick **Parkinson's**: show the tremor reading and run the finger-tap test.
 3. Pick **Cognitive**: run the reaction test.
 4. **Run AI agent:** show the tool-call trace and the difficulty change it makes. (NVIDIA)

@@ -8,14 +8,14 @@ const icon = (name) => `<svg><use href="#i-${name}"/></svg>`;
 
 // ---------- conditions ----------
 const CONDITIONS = {
-  stroke: { title: "Stroke recovery", note: () => "Moves only while you try, with clean posture",
-    stats: ["reps", "activation", "compensation", "difficulty"] },
+  stroke: { title: "Stroke recovery", note: () => "Moves only while you try",
+    stats: ["reps", "activation", "session", "difficulty"] },
   parkinsons: { title: "Parkinson's", note: (s) => (s.tremor_hz > 0 ? `Tremor ${s.tremor_hz.toFixed(1)} Hz` : "No tremor detected"),
     stats: ["tremor", "steadiness", "taprate", "tapdec"], test: "tap" },
   phantom: { title: "Phantom limb", note: () => "Mirrored hand for mirror therapy",
-    stats: ["reps", "activation", "compensation", "difficulty"] },
+    stats: ["reps", "activation", "session", "difficulty"] },
   cp: { title: "Cerebral palsy", note: () => "Child-size hand · joint color shows flexion",
-    stats: ["reps", "activation", "compensation", "difficulty"] },
+    stats: ["reps", "activation", "session", "difficulty"] },
   cognitive: { title: "Cognitive screening", note: () => "Squeeze when the screen flashes",
     stats: ["rtMean", "rtLast", "rtTrials", "rtTrend"], test: "reaction" },
 };
@@ -24,7 +24,7 @@ const tapOk = (s) => s.tapping && !s.tapping.error;
 const STATS = {
   reps: ["Reps", "repeat", (s) => s.reps],
   activation: ["Activation", "bolt", (s) => `${s.activation_rate.toFixed(0)}%`],
-  compensation: ["Compensation", "posture", (s) => s.compensation_count],
+  session: ["Session time", "timer", (s) => fmtClock((s.session_s || 0) * 1000)],
   difficulty: ["Difficulty", "level", (s) => `${s.difficulty} / 5`],
   tremor: ["Tremor", "wave", (s) => (s.tremor_hz > 0 ? `${s.tremor_hz.toFixed(1)} Hz` : "None")],
   steadiness: ["Steadiness", "target", (s) => `${s.steadiness.toFixed(0)} / 100`],
@@ -45,8 +45,6 @@ const STATS = {
 
 // type -> [label, severity, icon]
 const EVENTS = {
-  shoulder_hike: ["Shoulder hike", "warn", "posture"],
-  trunk_lean: ["Trunk lean", "warn", "posture"],
   latency: ["Reaction", "info", "timer"],
   latency_miss: ["Reaction missed", "warn", "timer"],
   tapping: ["Tap test done", "info", "tap"],
@@ -112,7 +110,6 @@ if (!hand) {
 function gateState(s) {
   if (!s.sensors_ok) return ["Sensors offline", "bad", "blocked"];
   if (!s.calibrated) return ["Calibrating", "", ""];
-  if (s.compensation?.length) return ["Blocked: posture", "bad", "blocked"];
   if (s.gate_open) return ["Moving", "good", "open"];
   if (s.control_mode === "intent") return [Math.max(...s.angles) > 0 ? "Opening" : "Waiting", "", ""];
   if (!s.curls) return ["No hand in view", "", ""];

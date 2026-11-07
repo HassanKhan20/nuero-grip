@@ -1,4 +1,4 @@
-"""Per-session metrics: reps, gate activation rate, compensation events, reaction latency."""
+"""Per-session metrics: reps, gate activation rate, session time, reaction latency."""
 from collections import deque
 
 from .gate import GateOutput
@@ -20,8 +20,8 @@ class SessionMetrics:
         self._armed = False
         self._target_frames = 0
         self._open_frames = 0
-        self._prev_comp: set[str] = set()
-        self.compensation_count = 0
+        self._first_ms: int | None = None
+        self._last_ms = 0
         self.events: deque[dict] = deque(maxlen=50)
         self._cue_ms: int | None = None
         self._prev_active = False
@@ -54,11 +54,9 @@ class SessionMetrics:
                 self.reps += 1
                 self._armed = False
 
-        comp = set(vision.compensation)
-        for kind in sorted(comp - self._prev_comp):
-            self.compensation_count += 1
-            new.append({"t": t_ms, "type": kind})
-        self._prev_comp = comp
+        if self._first_ms is None:
+            self._first_ms = t_ms
+        self._last_ms = t_ms
 
         grip = peak is not None and peak >= REP_HIGH
         if self.latency_response == "grip":
@@ -84,7 +82,7 @@ class SessionMetrics:
         return {
             "reps": self.reps,
             "activation_rate": round(100 * self._open_frames / self._target_frames, 1) if self._target_frames else 0.0,
-            "compensation_count": self.compensation_count,
+            "session_s": round((self._last_ms - self._first_ms) / 1000) if self._first_ms is not None else 0,
             "events": list(self.events),
             "latency_ms_mean": round(sum(self.latencies) / len(self.latencies)) if self.latencies else None,
             "latency_trials": len(self.latencies),

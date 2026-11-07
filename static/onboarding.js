@@ -22,7 +22,7 @@ function steps(role) {
     { target: ".col.left .panel:nth-child(2)", title: therapist ? "Motor function status" : "Today",
       body: "The numbers that matter for this condition. Activation is the share of tries strong enough to move the hand." },
     { target: ".col.right .panel:first-child", title: "Needs attention",
-      body: "Posture compensation and missed tests appear here, most serious first." },
+      body: "AI alerts, missed reaction tests and calibration problems appear here, most serious first." },
     { target: ".col.right .panel:nth-child(2)", title: therapist ? "Session review" : "Your progress",
       body: therapist
         ? "End the session and Nemotron reviews it: what changed, a plan, and the next difficulty."

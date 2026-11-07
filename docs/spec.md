@@ -1,14 +1,14 @@
 # NeuroGrip — Build Spec (hackathon cut)
 
 ## What it is
-Motor-intent rehab platform. Capacitive headband (ESP32 touch, temple + forearm) + accelerometer wristband + webcam tracking the healthy hand. A gating engine drives proportional per-finger servos on the impaired hand **only when** intent is confirmed (both sites), posture is clean (no compensation), and the healthy hand has set a target. A Nemotron agent analyzes sessions and adapts difficulty. A Flask dashboard shows everything live.
+Motor-intent rehab platform. Capacitive headband (ESP32 touch, temple + forearm) + accelerometer wristband + webcam tracking the healthy hand. A gating engine drives proportional per-finger servos on the impaired hand **only when** intent is confirmed (both sites) and the healthy hand is in view. Posture/compensation tracking was removed (unreliable). A Nemotron agent analyzes sessions and adapts difficulty. A Flask dashboard shows everything live.
 
 Conditions (mode selector = header text + highlighted metrics only, no separate logic): stroke, parkinson's, phantom limb, pediatric CP, cognitive screening.
 
 ## Tracks
 - Overall (auto)
 - NVIDIA: Nemotron agent with tool calls (`get_session_metrics`, `get_patient_history`, `set_difficulty`, `trigger_feedback`). **Tool-call trace visible on the dashboard.**
-- Winstead PC: dashboard as incident command center — hardcoded therapist/patient logins with different views, timestamped compensation/threshold event log, live updating. Text messaging only if time remains.
+- Winstead PC: dashboard as incident command center — hardcoded therapist/patient logins with different views, timestamped event log (AI alerts, missed tests, calibration), live updating. Text messaging only if time remains.
 - State Farm: multi-patient triage panel where **an LLM flags urgent patients with a reason**.
 - MLH: MongoDB Atlas (session storage), Vultr (static dashboard deploy), GoDaddy (domain), Gemini (plain-language patient view).
 

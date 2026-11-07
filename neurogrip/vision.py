@@ -1,10 +1,10 @@
-"""Healthy-hand tracking (finger curls) and compensatory motion detection."""
+"""Healthy-hand tracking: finger curls, pinch distance and wrist position from the webcam."""
 import logging
 import math
 import threading
 import time
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 # Curl calibration constants: tune with `python -m neurogrip.vision`
@@ -19,7 +19,6 @@ FINGERS = {"index": (5, 8), "middle": (9, 12), "ring": (13, 16), "pinky": (17, 2
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
 MODEL_URLS = {
     "hand_landmarker.task": "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
-    "pose_landmarker_lite.task": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
 }
 
 
@@ -39,37 +38,9 @@ def finger_curls(lm: list[tuple[float, float]]) -> dict[str, float]:
     return out
 
 
-class CompensationDetector:
-    def __init__(self, calib_frames: int = 60, hike: float = 0.04, lean: float = 0.05):
-        self.calib_frames, self.hike, self.lean = calib_frames, hike, lean
-        self._calib: list[dict] = []
-        self._base: dict | None = None
-
-    def update(self, pose: dict[str, tuple[float, float]] | None) -> list[str]:
-        if pose is None:
-            return []
-        if self._base is None:
-            self._calib.append(pose)
-            if len(self._calib) >= self.calib_frames:
-                n = len(self._calib)
-                self._base = {k: (sum(p[k][0] for p in self._calib) / n, sum(p[k][1] for p in self._calib) / n)
-                              for k in ("l_sh", "r_sh")}
-            return []
-        out = []
-        b = self._base
-        if pose["l_sh"][1] < b["l_sh"][1] - self.hike or pose["r_sh"][1] < b["r_sh"][1] - self.hike:
-            out.append("shoulder_hike")
-        mid_now = (pose["l_sh"][0] + pose["r_sh"][0]) / 2
-        mid_base = (b["l_sh"][0] + b["r_sh"][0]) / 2
-        if abs(mid_now - mid_base) > self.lean:
-            out.append("trunk_lean")
-        return out
-
-
 @dataclass
 class VisionResult:
     curls: dict[str, float] | None
-    compensation: list[str] = field(default_factory=list)
     pinch: float | None = None                  # thumb-index distance / hand size
     wrist: tuple[float, float] | None = None    # normalized image coords
     frame_id: int = 0                           # changes only when a new camera frame was processed
@@ -86,7 +57,7 @@ HAND_CONNECTIONS = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (5, 6), (6, 7), (7, 
 
 
 class MockVision:
-    """Curls follow a 4 s open/close cycle; shoulder hike for 1 s every 15 s."""
+    """Curls follow a 4 s open/close cycle."""
 
     def __init__(self, seed: int = 0, tremor_hz: float = 0.0):
         self.seed = seed
@@ -98,11 +69,10 @@ class MockVision:
         # fingers close in a slight wave (thumb leads, pinky lags) so each servo visibly moves on its own
         curls = {k: round(0.5 - 0.5 * math.cos(2 * math.pi * (t - 120 * i) / 4000), 3)
                  for i, k in enumerate(("thumb", "index", "middle", "ring", "pinky"))}
-        comp = ["shoulder_hike"] if 10000 <= t % 15000 < 11000 else []
         wrist = (0.5 + 0.004 * math.sin(2 * math.pi * self.tremor_hz * s), 0.6)
         fatigue = max(0.35, 1 - 0.05 * (s % 30))  # tapping amplitude decays: bradykinesia demo
         pinch = round(0.15 + 0.6 * fatigue * (0.5 + 0.5 * math.sin(2 * math.pi * 2.2 * s)), 4)
-        return VisionResult(curls, comp, pinch, wrist, int(t // 33), s)
+        return VisionResult(curls, pinch, wrist, int(t // 33), s)
 
     def jpeg(self) -> bytes | None:
         return None
@@ -127,14 +97,13 @@ class CameraVision:
 
     def __init__(self, camera_index: int = 0):
         self.camera_index = camera_index
-        self._result = VisionResult(None, [])
+        self._result = VisionResult(None)
         self._result_at = 0.0
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._jpeg: bytes | None = None
         self.available = True
-        self.comp = CompensationDetector()
 
     def jpeg(self) -> bytes | None:
         """Latest annotated frame (mirrored, skeleton drawn), or None when the camera is stale/off."""
@@ -155,7 +124,7 @@ class CameraVision:
     def latest(self, t_ms: int | None = None) -> VisionResult:
         with self._lock:
             if time.monotonic() - self._result_at > STALE_S:
-                return VisionResult(None, [])  # frozen/unplugged camera must not keep a target alive
+                return VisionResult(None)  # frozen/unplugged camera must not keep a target alive
             return self._result
 
     def _run(self) -> None:
@@ -173,9 +142,6 @@ class CameraVision:
         hands = mpv.HandLandmarker.create_from_options(mpv.HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=_model("hand_landmarker.task")),
             running_mode=mpv.RunningMode.VIDEO, num_hands=1))
-        pose = mpv.PoseLandmarker.create_from_options(mpv.PoseLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=_model("pose_landmarker_lite.task")),
-            running_mode=mpv.RunningMode.VIDEO))
         cap = cv2.VideoCapture(self.camera_index)
         if not cap.isOpened():
             self.available = False
@@ -193,32 +159,21 @@ class CameraVision:
             ts = int((now - t0) * 1000)
             img = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             h = hands.detect_for_video(img, ts)
-            p = pose.detect_for_video(img, ts)
             curls = pinch = wrist = None
             if h.hand_landmarks:
                 lm = [(l.x, l.y) for l in h.hand_landmarks[0]]
                 curls, pinch, wrist = finger_curls(lm), pinch_distance(lm), lm[0]
-            pose_pts = None
-            if p.pose_landmarks:
-                pl = p.pose_landmarks[0]
-                if min(pl[11].visibility or 0, pl[12].visibility or 0) > 0.5:
-                    pose_pts = {"l_sh": (pl[11].x, pl[11].y), "r_sh": (pl[12].x, pl[12].y)}
-            comp = self.comp.update(pose_pts)
             frame_id += 1
-            jpeg = self._annotate(cv2, frame, h.hand_landmarks[0] if h.hand_landmarks else None, pose_pts, comp)
+            jpeg = self._annotate(cv2, frame, h.hand_landmarks[0] if h.hand_landmarks else None)
             with self._lock:
-                self._result = VisionResult(curls, comp, pinch, wrist, frame_id, now)
+                self._result = VisionResult(curls, pinch, wrist, frame_id, now)
                 self._result_at = now
                 self._jpeg = jpeg
         cap.release()
 
     @staticmethod
-    def _annotate(cv2, frame, hand, pose_pts, comp) -> bytes:
+    def _annotate(cv2, frame, hand) -> bytes:
         hgt, wid = frame.shape[:2]
-        if pose_pts:
-            a = tuple(int(v) for v in (pose_pts["l_sh"][0] * wid, pose_pts["l_sh"][1] * hgt))
-            b = tuple(int(v) for v in (pose_pts["r_sh"][0] * wid, pose_pts["r_sh"][1] * hgt))
-            cv2.line(frame, a, b, (80, 80, 240) if comp else (200, 200, 200), 4)
         if hand:
             pts = [(int(l.x * wid), int(l.y * hgt)) for l in hand]
             for i, j in HAND_CONNECTIONS:

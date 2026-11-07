@@ -49,28 +49,21 @@ class Gate:
         self.grip = "fist"
 
     def step(self, intent: IntentState, vision: VisionResult) -> GateOutput:
-        compensating = bool(vision.compensation)
         buzzer = 400 + int(800 * intent.strength) if intent.active else 0
         if self.control == "intent":
-            return self._step_intent(intent, compensating, buzzer)
+            return self._step_intent(intent, buzzer)
 
         curls = vision.curls
         target_set = curls is not None  # an open healthy hand is a valid target: it releases the grip
-        is_open = intent.active and not compensating and target_set
+        is_open = intent.active and target_set
         if is_open:
             self.angles = tuple(round(curls[k] * SERVO_MAX) for k in FINGERS)
-        led = "R" if compensating else "G" if is_open else "O"
-        return GateOutput(is_open, target_set, self.angles, led, buzzer)
+        return GateOutput(is_open, target_set, self.angles, "G" if is_open else "O", buzzer)
 
-    def _step_intent(self, intent: IntentState, compensating: bool, buzzer: int) -> GateOutput:
-        is_open = intent.active and not compensating
-        if compensating:
-            target = self.angles  # hold while posture is wrong
-        else:
-            # closure starts at the threshold (strength 0.5) and is full at twice the threshold
-            closure = _clamp01((intent.strength - 0.5) * 2) if intent.active else 0.0
-            target = tuple(round(t * SERVO_MAX) for t in grip_targets(self.grip, closure))
+    def _step_intent(self, intent: IntentState, buzzer: int) -> GateOutput:
+        # closure starts at the threshold (strength 0.5) and is full at twice the threshold
+        closure = _clamp01((intent.strength - 0.5) * 2) if intent.active else 0.0
+        target = tuple(round(t * SERVO_MAX) for t in grip_targets(self.grip, closure))
         self.angles = tuple(a + max(-MAX_STEP_DEG, min(MAX_STEP_DEG, t - a)) for a, t in zip(self.angles, target))
         drive = max(self.angles) / SERVO_MAX
-        led = "R" if compensating else "G" if is_open else "O"
-        return GateOutput(is_open, True, self.angles, led, buzzer, drive=round(drive, 3))
+        return GateOutput(intent.active, True, self.angles, "G" if intent.active else "O", buzzer, drive=round(drive, 3))

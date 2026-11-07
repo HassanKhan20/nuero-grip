@@ -64,8 +64,7 @@ class Engine:
         self._writer: threading.Thread | None = None
         self._lock = threading.RLock()
         self._live = {"angles": (0, 0, 0, 0, 0), "gate_open": False, "intent_strength": 0.0,
-                      "intent_active": False, "calibrated": False, "curls": None, "led": "O",
-                      "compensation": []}
+                      "intent_active": False, "calibrated": False, "curls": None, "led": "O"}
 
     def send(self, cmd: str) -> None:
         with self._lock:
@@ -119,7 +118,7 @@ class Engine:
             self.new_events.extend(events)
             self._live = {"angles": g.angles, "gate_open": g.open, "intent_strength": round(istate.strength, 2),
                           "intent_active": istate.active, "calibrated": istate.calibrated,
-                          "curls": v.curls, "led": g.led, "compensation": list(v.compensation)}
+                          "curls": v.curls, "led": g.led}
             live = self._live
         for e in events:  # outside the lock: listeners do socket I/O
             for fn in list(self.listeners):

@@ -1,4 +1,4 @@
-from neurogrip.vision import CompensationDetector, MockVision, finger_curls
+from neurogrip.vision import MockVision, VisionResult, finger_curls
 
 WRIST = (0.5, 0.8)
 MCPS = {5: (0.45, 0.6), 9: (0.5, 0.6), 13: (0.55, 0.6), 17: (0.6, 0.62)}
@@ -34,37 +34,22 @@ def test_fist_curls_high():
     assert all(v > 0.9 for v in c.values())
 
 
-def test_shoulder_hike_detected():
-    c = CompensationDetector(calib_frames=5)
-    for _ in range(5):
-        c.update({"l_sh": (0.4, 0.5), "r_sh": (0.6, 0.5)})
-    assert c.update({"l_sh": (0.4, 0.44), "r_sh": (0.6, 0.5)}) == ["shoulder_hike"]
-
-
-def test_trunk_lean_detected():
-    c = CompensationDetector(calib_frames=5)
-    for _ in range(5):
-        c.update({"l_sh": (0.4, 0.5), "r_sh": (0.6, 0.5)})
-    assert c.update({"l_sh": (0.47, 0.5), "r_sh": (0.67, 0.5)}) == ["trunk_lean"]
-
-
-def test_no_pose_no_compensation():
-    assert CompensationDetector(calib_frames=0).update(None) == []
-
-
-def test_mock_vision_has_curls_and_occasional_compensation():
+def test_mock_vision_has_curls():
     v = MockVision()
     results = [v.latest(t_ms=t) for t in range(0, 15000, 20)]
     assert all(r.curls is not None for r in results)
     assert max(r.curls["index"] for r in results) > 0.9
-    assert any(r.compensation for r in results) and not all(r.compensation for r in results)
+
+
+def test_vision_result_has_no_posture_field():
+    assert not hasattr(VisionResult(None), "compensation")
 
 
 def test_camera_result_goes_stale():
     import time
-    from neurogrip.vision import CameraVision, VisionResult
+    from neurogrip.vision import CameraVision
     cam = CameraVision(0)  # not started
-    cam._set(VisionResult(dict.fromkeys(("thumb", "index", "middle", "ring", "pinky"), 1), []))
+    cam._set(VisionResult(dict.fromkeys(("thumb", "index", "middle", "ring", "pinky"), 1)))
     assert cam.latest().curls is not None
     cam._result_at = time.monotonic() - 1
     assert cam.latest().curls is None
