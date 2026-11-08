@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mind Control Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<script src="/static/vendor/socket.io.min.js"></script>
+<style>
+  :root {
+    --bg-1: #0b0f1d; --bg-2: #161a33; --ink: #e9ecf8; --muted: #9aa3c0; --line: rgb(233 236 248 / .09);
+    --card: rgb(255 255 255 / .045); --intent: #8c9eff; --live: #5fd1c4; --ai: #c3a6ff; --warn: #f0a35e; --bad: #ef7a6c;
+    --glow: rgb(95 209 196 / .55);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; color: var(--ink); font: 15px/1.45 Inter, system-ui, sans-serif;
+    background:
+      radial-gradient(900px 600px at 50% 38%, rgb(140 158 255 / .16), transparent 60%),
+      radial-gradient(700px 500px at 85% 90%, rgb(95 209 196 / .10), transparent 60%),
+      linear-gradient(160deg, var(--bg-1), var(--bg-2));
+    overflow-x: hidden;
+  }
+  .neural { position: fixed; inset: 0; pointer-events: none; opacity: .5; }
+  header { display: flex; align-items: center; gap: 16px; padding: 18px 28px; position: relative; z-index: 1; }
+  .brand { font: 600 18px "Space Grotesk", sans-serif; letter-spacing: .02em; }
+  .brand small { display: block; font: 500 11px Inter; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .chips { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--line);
+          border-radius: 999px; background: var(--card); font-size: 12px; color: var(--muted); }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: #555c78; }
+  .chip.ok i { background: var(--live); box-shadow: 0 0 8px var(--glow); }
+  .chip.bad i { background: var(--bad); }
+  .chip.wait i { background: var(--warn); }
+  a.back { color: var(--muted); text-decoration: none; font-size: 13px; }
+  a.back:hover { color: var(--ink); }
+
+  main { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px;
+         padding: 0 28px 28px; max-width: 1280px; margin: 0 auto; }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; padding: 0 16px 24px; } header { padding: 14px 16px; } }
+
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 18px; padding-top: 6px; }
+  .ring-wrap { position: relative; width: min(440px, 86vw); aspect-ratio: 1; }
+  .ring-wrap svg { width: 100%; height: 100%; overflow: visible; }
+  .track { stroke: rgb(233 236 248 / .08); }
+  .meter { stroke: var(--intent); transition: stroke-dashoffset .12s linear, stroke .3s; filter: drop-shadow(0 0 10px rgb(140 158 255 / .6)); }
+  .active .meter { stroke: var(--live); filter: drop-shadow(0 0 16px var(--glow)); }
+  .tick { stroke: var(--warn); stroke-width: 3; }
+  .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 4px; }
+  .pct { font: 700 clamp(56px, 11vw, 96px)/1 "Space Grotesk", sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .state { font: 600 13px Inter; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+  .active .state { color: var(--live); }
+  .hint { color: var(--muted); font-size: 14px; max-width: 260px; margin: 6px auto 0; }
+  .pulse { position: absolute; inset: 12%; border-radius: 50%; opacity: 0; pointer-events: none;
+           box-shadow: 0 0 80px 20px var(--glow); transition: opacity .25s; }
+  .active .pulse { opacity: .55; animation: breathe 1.6s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: .25; } }
+
+  .wave-card { width: 100%; max-width: 760px; }
+  canvas#wave { width: 100%; height: 130px; display: block; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px;
+          backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  .card h2 { margin: 0 0 12px; font: 600 11px Inter; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  aside { display: flex; flex-direction: column; gap: 16px; }
+
+  .fingers { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-items: end; height: 140px; }
+  .finger { display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+  .finger .bar { width: 100%; max-width: 34px; flex: 1; border-radius: 10px; background: rgb(233 236 248 / .06);
+                 position: relative; overflow: hidden; }
+  .finger .fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; border-radius: 10px;
+                  background: linear-gradient(to top, var(--live), var(--intent)); transition: height .1s linear; }
+  .finger span { font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+  .hand-state { margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .hand-state b { color: var(--ink); }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { padding: 10px 12px; border-radius: 12px; background: rgb(233 236 248 / .035); }
+  .stat b { display: block; font: 600 24px "Space Grotesk"; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+
+  button { font: 600 14px Inter; border-radius: 12px; border: 1px solid var(--line); background: rgb(233 236 248 / .06);
+           color: var(--ink); padding: 11px 14px; cursor: pointer; }
+  button:hover { background: rgb(233 236 248 / .1); }
+  button.primary { background: linear-gradient(135deg, #6f7df0, #8c6ff0); border: 0; width: 100%; padding: 14px; font-size: 15px; }
+  button.primary:hover { filter: brightness(1.08); }
+  .grips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .grips button { padding: 7px 10px; font-size: 12px; }
+  .grips button.on { border-color: var(--intent); color: var(--intent); }
+  .small { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  kbd { font: 11px Inter; padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; }
+
+  .overlay { position: fixed; inset: 0; z-index: 5; display: grid; place-content: center; text-align: center;
+             background: rgb(8 10 22 / .82); backdrop-filter: blur(6px); }
+  .overlay[hidden] { display: none; }
+  .overlay h1 { margin: 0; font: 700 clamp(40px, 8vw, 84px)/1.05 "Space Grotesk"; letter-spacing: -.01em; }
+  .overlay p { color: var(--muted); font-size: 18px; margin: 14px 0 0; }
+  .overlay .count { font: 600 28px "Space Grotesk"; color: var(--intent); margin-top: 18px; }
+  .overlay.squeeze h1 { color: var(--live); text-shadow: 0 0 30px var(--glow); }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 6; padding: 12px 18px;
+           border-radius: 12px; background: #20264a; border: 1px solid var(--line); box-shadow: 0 10px 30px rgb(0 0 0 / .4); }
+  .toast[hidden] { display: none; }
+  .banner { margin: 0 28px 12px; padding: 12px 16px; border-radius: 12px; background: rgb(239 122 108 / .12);
+            border: 1px solid rgb(239 122 108 / .35); color: #ffd3cc; position: relative; z-index: 1; }
+  .banner[hidden] { display: none; }
+  @media (prefers-reduced-motion: reduce) { .active .pulse { animation: none; } .meter, .fill { transition: none; } }
+</style>
+</head>
+<body>
+<svg class="neural" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <g fill="none" stroke="#8c9eff" stroke-opacity=".12" stroke-width="1">
+    <path d="M0 620 C 220 560, 300 700, 520 640 S 860 520, 1200 600"/>
+    <path d="M0 180 C 180 240, 360 120, 560 190 S 900 300, 1200 210"/>
+    <path d="M90 0 V140 H260 V260"/><path d="M1110 800 V650 H940 V560"/>
+    <path d="M1040 0 V120 H880 V230"/><path d="M160 800 V680 H330 V590"/>
+  </g>
+  <g fill="#8c9eff" fill-opacity=".2"><circle cx="260" cy="260" r="3"/><circle cx="940" cy="560" r="3"/><circle cx="880" cy="230" r="3"/><circle cx="330" cy="590" r="3"/></g>
+</svg>
+
+<header>
+  <div class="brand">NeuroGrip<small>Mind control check</small></div>
+  <div class="chips">
+    <span class="chip" id="chip-conn"><i></i><span>Connecting</span></span>
+    <span class="chip" id="chip-signal"><i></i><span>Headband</span></span>
+    <span class="chip" id="chip-cal"><i></i><span>Not calibrated</span></span>
+  </div>
+  <a class="back" href="/">Dashboard →</a>
+</header>
+<div class="banner" id="banner" hidden></div>
+
+<main>
+  <section class="stage">
+    <div class="ring-wrap" id="ring">
+      <div class="pulse"></div>
+      <svg viewBox="0 0 240 240">
+        <circle class="track" cx="120" cy="120" r="104" fill="none" stroke-width="14"/>
+        <circle class="meter" id="meter" cx="120" cy="120" r="104" fill="none" stroke-width="14" stroke-linecap="round"
+                transform="rotate(-90 120 120)" stroke-dasharray="653.5" stroke-dashoffset="653.5"/>
+        <line class="tick" x1="120" y1="2" x2="120" y2="26" transform="rotate(180 120 120)"/>
+      </svg>
+      <div class="center">
+        <div class="pct" id="pct">0%</div>
+        <div class="state" id="state">Connecting</div>
+        <div class="hint" id="hint">&nbsp;</div>
+      </div>
+    </div>
+    <div class="card wave-card">
+      <h2>Intent signal · last 15 seconds <span style="float:right;color:var(--warn)">— — trigger line</span></h2>
+      <canvas id="wave"></canvas>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>Robotic hand response</h2>
+      <div class="fingers" id="fingers"></div>
+      <p class="hand-state" id="hand-state">Hand: <b>open</b></p>
+      <div class="grips" id="grips" role="group" aria-label="Grip shape"></div>
+    </div>
+    <div class="card">
+      <h2>This session</h2>
+      <div class="stats">
+        <div class="stat"><b id="reps">0</b><span>Hand activations</span></div>
+        <div class="stat"><b id="act">0%</b><span>Time engaged</span></div>
+        <div class="stat"><b id="raw">—</b><span>Temple reading</span></div>
+        <div class="stat"><b id="drop">—</b><span>Change vs relaxed</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Calibration</h2>
+      <button class="primary" id="btn-cal">Calibrate to my effort</button>
+      <p class="small">Relax for 2 s, then clench your jaw as hard as you can for 3 s. NeuroGrip scales the trigger to <i>your</i> range. Shortcut: <kbd>C</kbd></p>
+    </div>
+  </aside>
+</main>
+
+<div class="overlay" id="overlay" hidden><div><h1 id="ov-title">Relax</h1><p id="ov-sub">Let your jaw go loose</p><div class="count" id="ov-count"></div></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const FINGERS = ["Thumb", "Index", "Middle", "Ring", "Pinky"];
+const GRIPS = ["fist", "pinch", "point", "wave"];
+const CIRC = 2 * Math.PI * 104;
+const WINDOW_MS = 15000;
+const samples = [];  // [time ms, strength 0..1, active]
+let last = null, wasActive = false;
+
+$("fingers").innerHTML = FINGERS.map((f) => `<div class="finger"><div class="bar"><div class="fill"></div></div><span>${f[0]}</span></div>`).join("");
+$("grips").innerHTML = GRIPS.map((g) => `<button type="button" data-grip="${g}">${g[0].toUpperCase() + g.slice(1)}</button>`).join("");
+
+async function api(path, body) {
+  const res = await fetch(path, { method: "POST", headers: body ? { "Content-Type": "application/json" } : {},
+                                  body: body ? JSON.stringify(body) : undefined });
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+let toastTimer;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 3500); }
+function chip(id, cls, text) { const c = $(id); c.className = "chip " + cls; c.querySelector("span").textContent = text; }
+
+function render(s) {
+  last = s;
+  const strength = Math.max(0, Math.min(1, s.intent_strength || 0));
+  const touch = s.touch || {};
+  const signal = s.sensors_ok && (s.source_kind !== "hardware" || (touch.temple || 0) > 0);
+  const active = signal && s.intent_active;
+  samples.push([performance.now(), signal ? strength : 0, active]);
+
+  $("ring").classList.toggle("active", !!active);
+  $("meter").setAttribute("stroke-dashoffset", (CIRC * (1 - strength)).toFixed(1));
+  $("pct").textContent = Math.round(strength * 100) + "%";
+
+  let state, hint;
+  if (!signal) { state = "No signal"; hint = s.source_kind === "hardware" ? "Headband is silent. Check its power bank." : "Waiting for sensor data"; }
+  else if (!s.calibrated) { state = "Reading baseline"; hint = "Stay relaxed for a moment"; }
+  else if (active) { state = s.gate_open ? "Hand moving" : "Intent detected"; hint = "Your effort is driving the hand"; }
+  else if (strength > 0.25) { state = "Building"; hint = "Almost there — a little harder"; }
+  else { state = "Relaxed"; hint = s.source_kind === "hardware" ? "Clench your jaw to move the hand" : "Hold Space (or click Calibrate) to try"; }
+  $("state").textContent = state; $("hint").textContent = hint;
+
+  if (active && !wasActive && navigator.vibrate) navigator.vibrate(30);
+  wasActive = active;
+
+  const angles = s.angles || [0, 0, 0, 0, 0];
+  document.querySelectorAll(".finger .fill").forEach((el, i) => (el.style.height = Math.round((angles[i] || 0) / 160 * 100) + "%"));
+  const closed = angles.reduce((a, b) => a + b, 0) / (160 * 5);
+  $("hand-state").innerHTML = `Hand: <b>${closed > 0.6 ? "closed" : closed > 0.1 ? "closing" : "open"}</b> · control: <b>${s.control_mode === "intent" ? "intent only" : "mirror camera"}</b>`;
+  document.querySelectorAll("[data-grip]").forEach((b) => b.classList.toggle("on", b.dataset.grip === s.grip && s.control_mode === "intent"));
+
+  $("reps").textContent = s.reps ?? 0;
+  $("act").textContent = Math.round(s.activation_rate || 0) + "%";
+  $("raw").textContent = touch.temple ?? "—";
+  $("drop").textContent = s.calibrated ? ((touch.temple_drop || 0) * 100).toFixed(1) + "%" : "—";
+
+  chip("chip-signal", signal ? "ok" : "bad", s.source_kind === "hardware" ? (signal ? "Headband live" : "Headband silent") :
+       s.source_kind === "camera" ? "Camera mode (Space = intent)" : "Simulated");
+  chip("chip-cal", s.range_calibrated ? "ok" : "wait", s.range_calibrated ? "Calibrated to you" : "Not calibrated");
+
+  const ov = $("overlay");
+  if (s.calibration_phase) {
+    ov.hidden = false;
+    const squeeze = s.calibration_phase === "squeeze";
+    ov.classList.toggle("squeeze", squeeze);
+    $("ov-title").textContent = squeeze ? "CLENCH!" : "Relax";
+    $("ov-sub").textContent = squeeze ? "As hard as you can — hold it" : "Let your jaw go loose";
+    $("ov-count").textContent = (s.calibration_remaining_s || 0).toFixed(1) + " s";
+  } else ov.hidden = true;
+
+  const banner = $("banner");
+  if (s.source_kind === "hardware" && !signal) { banner.hidden = false; banner.textContent = "Headband signal lost: the hand stays open for safety until it comes back."; }
+  else banner.hidden = true;
+}
+
+function drawWave() {
+  const c = $("wave"), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; }
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const now = performance.now();
+  while (samples.length && now - samples[0][0] > WINDOW_MS) samples.shift();
+  const x = (t) => w - (now - t) / WINDOW_MS * w, y = (v) => h - 6 - v * (h - 12);
+  g.setLineDash([6, 6]); g.strokeStyle = "rgba(240,163,94,.7)"; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, y(0.5)); g.lineTo(w, y(0.5)); g.stroke(); g.setLineDash([]);
+  if (samples.length > 1) {
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, "rgba(95,209,196,.35)"); grad.addColorStop(1, "rgba(140,158,255,0)");
+    g.beginPath(); g.moveTo(x(samples[0][0]), h);
+    samples.forEach(([t, v]) => g.lineTo(x(t), y(v)));
+    g.lineTo(x(samples[samples.length - 1][0]), h); g.closePath(); g.fillStyle = grad; g.fill();
+    g.beginPath(); samples.forEach(([t, v], i) => (i ? g.lineTo(x(t), y(v)) : g.moveTo(x(t), y(v))));
+    g.strokeStyle = "#8c9eff"; g.lineWidth = 2.5; g.stroke();
+    const [, v, a] = samples[samples.length - 1];
+    g.beginPath(); g.arc(w - 4, y(v), 5, 0, Math.PI * 2); g.fillStyle = a ? "#5fd1c4" : "#8c9eff"; g.fill();
+  }
+  requestAnimationFrame(drawWave);
+}
+requestAnimationFrame(drawWave);
+
+const socket = io();
+socket.on("connect", () => chip("chip-conn", "ok", "Connected"));
+socket.on("disconnect", () => chip("chip-conn", "bad", "Reconnecting"));
+socket.on("connect_error", () => chip("chip-conn", "bad", "Sign in on the dashboard first"));
+socket.on("state", render);
+socket.on("event", (e) => {
+  if (e.type === "calibrated") toast(`Calibrated · your full clench = ${e.temple_range_pct}% change. Trigger scaled to you.`);
+  if (e.type === "calibration_failed") toast(e.reason);
+});
+
+async function calibrate() { try { await api("/api/calibrate"); } catch (err) { toast(err.message); } }
+$("btn-cal").addEventListener("click", calibrate);
+document.addEventListener("keydown", (e) => { if ((e.key === "c" || e.key === "C") && !e.repeat) calibrate(); });
+// camera/mock mode stand-in for the headband: hold Space to "try"
+let held = false;
+function hold(v) { if (held === v || (last && last.source_kind === "hardware")) return; held = v; api("/api/intent", { held: v }).catch(() => {}); }
+document.addEventListener("keydown", (e) => { if (e.code === "Space") { e.preventDefault(); hold(true); } });
+document.addEventListener("keyup", (e) => { if (e.code === "Space") hold(false); });
+window.addEventListener("blur", () => hold(false));
+document.querySelectorAll("[data-grip]").forEach((b) => b.addEventListener("click", () =>
+  api("/api/control", { mode: "intent", grip: b.dataset.grip }).catch((err) => toast(err.message))));
+
+fetch("/api/state").then((r) => (r.ok ? r.json() : null)).then((s) => s && render(s)).catch(() => {});
+</script>
+</body>
+</html>
