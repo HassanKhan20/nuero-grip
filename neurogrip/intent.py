@@ -103,13 +103,21 @@ class IntentDetector:
 
     def rezero(self) -> None:
         """Take a fresh relaxed baseline from the next frames (e.g. after putting the headband on).
+        Keeps this person's calibrated range (it's relative, so it fits the new baseline too).
         Applied on the next update() so it is safe to call from another thread."""
         self._rezero_pending = True
+
+    def load_range(self, full: "SiteRange") -> None:
+        """Reuse a saved personal range; the baseline is still taken fresh from the next relaxed frames."""
+        self.full = full
+        self._dir = getattr(full, "directions", (1, 1))
+        self._above = self._artifact_frames = 0
 
     def update(self, f: SensorFrame) -> IntentState:
         if getattr(self, "_rezero_pending", False):
             self._rezero_pending = False
-            self._baseline, self.full, self._calib = None, None, []
+            self._baseline, self._calib = None, []
+            self._above = self._artifact_frames = 0
         raw = (f.temple, f.forearm)
         if any(raw[i] <= 0 for i in self._idx):  # no signal (wireless headband silent)
             return IntentState(self._baseline is not None, False, 0.0, 0.0, 0.0, link_lost=True)

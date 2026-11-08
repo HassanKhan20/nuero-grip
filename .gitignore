@@ -9,3 +9,4 @@ models/
 # local app logs
 _*.log
 _*.err
+.ng_calibration.json

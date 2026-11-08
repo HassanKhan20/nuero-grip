@@ -1,4 +1,5 @@
 """Main loop: sensors + vision -> intent gate -> servos/biofeedback -> metrics."""
+import json
 import logging
 import math
 import os
@@ -7,13 +8,14 @@ import random
 import threading
 import time
 from collections import deque
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
 
 from .clinical import analyze_tapping, cv_tremor
 from .gate import CONTROL_MODES, GRIPS, THRESHOLDS, Gate
-from .intent import CAL_FRACTIONS, IntentDetector, calibrate_from
+from .intent import CAL_FRACTIONS, IntentDetector, SiteRange, calibrate_from
 from .metrics import SessionMetrics
 from .protocol import fmt_buzzer, fmt_led, fmt_servo
 from .signals import steadiness, tremor_frequency
@@ -143,8 +145,30 @@ class Engine:
         except ValueError as e:
             return [{"t": f.ms, "type": "calibration_failed", "reason": str(e)}]
         self.intent.set_calibration(base, full)
+        self._save_range(full)
         return [{"t": f.ms, "type": "calibrated",
                  "temple_range_pct": round(full[0] * 100, 1), "forearm_range_pct": round(full[1] * 100, 1)}]
+
+    cal_file: str | None = None  # where this wearer's range is kept across restarts (hardware only)
+
+    def _save_range(self, full) -> None:
+        if not self.cal_file:
+            return
+        try:
+            Path(self.cal_file).write_text(json.dumps({"full": list(full), "directions": list(full.directions),
+                                                      "noise": list(getattr(full, "noise", (0.0, 0.0)))}))
+        except OSError as e:
+            log.warning("could not save calibration: %s", e)
+
+    def load_range(self, path: str) -> bool:
+        """Restore the last calibration (headband is re-zeroed automatically on the first relaxed frames)."""
+        self.cal_file = path
+        try:
+            d = json.loads(Path(path).read_text())
+            self.intent.load_range(SiteRange(tuple(d["full"]), tuple(d["directions"]), tuple(d.get("noise", (0, 0)))))
+            return True
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
 
     def start_calibration(self) -> None:
         """Relax for 2 s, then squeeze as hard as possible for 3 s: scales intent to this wearer."""
@@ -313,6 +337,8 @@ def make_engine() -> Engine:
     else:
         engine = Engine(SerialSource(os.environ["NG_SERIAL_PORT"]), CameraVision(camera), store, kind="hardware")
     engine.set_control(os.environ.get("NG_CONTROL", default_control(kind)), os.environ.get("NG_GRIP", "fist"))
+    if kind == "hardware":
+        engine.load_range(os.environ.get("NG_CAL_FILE", str(Path(__file__).resolve().parent.parent / ".ng_calibration.json")))
     if os.environ.get("NG_LEVEL"):  # starting difficulty 1-5 (1 = lowest trigger)
         engine.set_difficulty(int(os.environ["NG_LEVEL"]))
     return engine

@@ -66,3 +66,30 @@ def test_trigger_stays_above_relaxed_jitter():
     assert not any(s.active for s in states)
     states = [d.update(Frame(20 + i, 990, 1000, 0, 0, 1000)) for i in range(10)]  # 1% = half of full focus
     assert states[-1].active
+
+
+def test_zero_keeps_calibrated_range():
+    from neurogrip.intent import IntentDetector, SiteRange
+    d = IntentDetector(calib_frames=2, sites=("temple",))
+    d.set_calibration((1000.0, 1000.0), SiteRange((0.02, 0.02)))
+    d.rezero()
+    for i in range(3):
+        d.update(Frame(i, 1100, 1000, 0, 0, 1000))  # new resting level after re-seating the headband
+    assert d.range_calibrated
+    states = [d.update(Frame(10 + i, 1078, 1000, 0, 0, 1000)) for i in range(6)]  # 2% focus from the new zero
+    assert states[-1].active and states[-1].strength == 1.0
+
+
+def test_calibration_survives_restart(tmp_path):
+    from neurogrip.engine import Engine
+    from neurogrip.intent import SiteRange
+    from neurogrip.sources import MockSource
+    from neurogrip.store import MemoryStore
+    from neurogrip.vision import MockVision
+    path = str(tmp_path / "cal.json")
+    a = Engine(MockSource(), MockVision(), MemoryStore(), kind="hardware")
+    a.load_range(path)
+    a._save_range(SiteRange((0.022, 0.5), (1, -1), (0.002, 0.0)))
+    b = Engine(MockSource(), MockVision(), MemoryStore(), kind="hardware")
+    assert b.load_range(path) and b.intent.range_calibrated
+    assert b.intent.full.directions == (1, -1) and b.intent.full.noise == (0.002, 0.0)
