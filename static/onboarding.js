@@ -12,24 +12,24 @@ function steps(role) {
       body: "The robotic hand moves only while the patient is trying. This tour takes about a minute." },
     { target: ".tabs", title: "Pick a condition",
       body: "Stroke, Parkinson's, phantom limb, cerebral palsy or cognitive screening. The 3D hand and the numbers change with it." },
-    { target: ".col.left .panel:first-child", title: "Try it",
+    { target: ".card-intent", title: "Try it",
       body: "Intent is the patient's effort. On the device it comes from the headband pads. Here, hold Space.",
       task: "Hold Space until the hand closes",
       practice: true,
       done: (s) => Math.max(...s.angles) >= 60 },
-    { target: ".dock-row", title: "Two ways to drive the hand",
-      body: "Mirror copies the healthy hand on camera. Intent only moves from effort alone. Drag the 3D hand to rotate it." },
-    { target: ".col.left .panel:nth-child(2)", title: therapist ? "Motor function status" : "Today",
+    { target: ".control-row", title: "Two ways to drive the hand",
+      body: "Mirror copies the healthy hand on camera. Intent only moves from effort alone." },
+    { target: ".callouts.right", title: "Every finger, measured",
+      body: "Each callout shows that finger's servo angle now and the peak range it reached this session. Use Front, 3/4, Side or the arrows to turn the hand." },
+    { target: "#stats", title: therapist ? "Motor function status" : "Today",
       body: "The numbers that matter for this condition. Activation is the share of tries strong enough to move the hand." },
-    { target: ".col.right .panel:first-child", title: "Needs attention",
-      body: "AI alerts, missed reaction tests and calibration problems appear here, most serious first." },
-    { target: ".col.right .panel:nth-child(2)", title: therapist ? "Session review" : "Your progress",
+    { target: ".card-review", title: therapist ? "Session overview" : "Your progress",
       body: therapist
-        ? "End the session and Nemotron reviews it: what changed, a plan, and the next difficulty."
+        ? "End the session and Nemotron reviews it, sets the next difficulty and writes a report you can export as a PDF."
         : "Gemini explains today's session in plain words." },
-    { target: ".dock", title: "Tools",
-      body: therapist ? "Caseload, sensors and calibration, and the full activity log. Replay this tour with ?."
-                      : "Sensors and calibration, and the full activity log. Replay this tour with ?." },
+    { target: ".nav-right", title: "Tools",
+      body: therapist ? "Caseload, activity log, sensors and calibration. Replay this tour with ?."
+                      : "Activity log, sensors and calibration. Replay this tour with ?." },
     { title: "You're set", body: "Calibrate to the wearer before the first session so effort is scaled to their pads.", final: true },
   ];
 }

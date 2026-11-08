@@ -1,6 +1,5 @@
 // 3D robotic hand (Three.js). Driven by the 5 servo angles; its look changes per condition.
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/OrbitControls.js";
 
 const OLIVE = 0x1f6feb;        // accent blue (name kept for brevity)
 const OLIVE_BRIGHT = 0x4d8dff; // light accent blue
@@ -53,14 +52,12 @@ export function createHand3D(container) {
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xe4ebf4, 10, 22);
-  const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 60);
-  camera.position.set(3.4, 1.9, 8.6);
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 0.3, 0);
-  controls.enableDamping = true;
-  controls.enablePan = false;
-  controls.minDistance = 5;
-  controls.maxDistance = 13;
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 60);
+  // controlled camera: preset views + 45-degree steps, eased (no free orbit)
+  const LOOK = new THREE.Vector3(0, 0.35, 0);
+  const VIEWS = { front: [0, 0.1], side: [Math.PI / 2, 0.1], palm: [0.55, 0.22] }; // [azimuth, elevation]
+  const view = { az: 0.55, el: 0.22, r: 9.2 };
+  const viewTarget = { ...view };
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0xc3cfdf, 1.35));
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -73,13 +70,13 @@ export function createHand3D(container) {
   glow.position.set(0, 0.9, 1.7);
   scene.add(glow);
 
-  const grid = new THREE.GridHelper(16, 32, 0xa9bbd3, 0xcfdae7);
-  grid.position.y = -2.1;
-  grid.material.transparent = true;
-  grid.material.opacity = 0.9;
-  scene.add(grid);
-  // glowing floor rings under the arm
-  const floorRings = [[0.9, 0x1f6feb, 0.45], [1.35, 0x1f6feb, 0.2], [2.1, 0x4d8dff, 0.14]].map(([r, color, opacity]) => {
+  // turntable: a soft shadow and two thin ellipse lines (no grid)
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(1.1, 64),
+    new THREE.MeshBasicMaterial({ color: 0xd3dce8, transparent: true, opacity: 0.7, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = -2.1;
+  scene.add(shadow);
+  const floorRings = [[2.3, 0xb6c4d8, 0.9], [2.38, 0x1f6feb, 0.18]].map(([r, color, opacity]) => {
     const ring = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.025, 96),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.NormalBlending, depthWrite: false, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2;
@@ -210,6 +207,7 @@ export function createHand3D(container) {
   let appliedMode = null;
   const emissiveTarget = new THREE.Color(0x000000);
   const tmp = new THREE.Vector3();
+  let anchorListener = null;
 
   function applyCondition(mode) {
     const phantom = mode === "phantom";
@@ -250,8 +248,7 @@ export function createHand3D(container) {
     th.joints[1].rotation.x = c * 0.7;
     th.joints[2].rotation.x = c * 0.8;
 
-    // idle sway + floor glow that brightens while the patient is trying
-    root.rotation.y = Math.sin(t * 0.35) * 0.12;
+    // floor line brightens while the patient is trying
     floorRings.forEach((ring, i) => {
       const boost = state.intent_active ? 1.8 : 1;
       ring.material.opacity = ring.userData.base * boost * (0.85 + 0.15 * Math.sin(t * 2 + i));
@@ -334,13 +331,37 @@ export function createHand3D(container) {
     glow.color.copy(gate === "blocked" ? new THREE.Color(RED) : new THREE.Color(GOOD));
     glow.intensity += ((gate ? 6 : 0) - glow.intensity) * Math.min(1, dt * 5);
 
-    controls.update();
+    // eased camera move toward the selected view
+    const k = Math.min(1, dt * 5);
+    view.az += (viewTarget.az - view.az) * k;
+    view.el += (viewTarget.el - view.el) * k;
+    camera.position.set(LOOK.x + view.r * Math.cos(view.el) * Math.sin(view.az), LOOK.y + view.r * Math.sin(view.el),
+      LOOK.z + view.r * Math.cos(view.el) * Math.cos(view.az));
+    camera.lookAt(LOOK);
     renderer.render(scene, camera);
+
+    // screen positions for the callout lines (middle knuckle of each finger, and the wrist)
+    if (anchorListener) {
+      const w = container.clientWidth, h = container.clientHeight;
+      const toScreen = (v) => { v.project(camera); return { x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * h }; };
+      const out = {};
+      KEYS.forEach((key) => { out[key] = toScreen(fingers[key].joints[1].getWorldPosition(tmp.clone())); });
+      out.wrist = toScreen(hand.localToWorld(wristLocal.clone()));
+      anchorListener(out);
+    }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 
   return {
+    setView(name) {
+      const v = VIEWS[name];
+      if (!v) return;
+      viewTarget.az = v[0] + Math.round((view.az - v[0]) / (2 * Math.PI)) * 2 * Math.PI; // shortest way round
+      viewTarget.el = v[1];
+    },
+    rotate(steps) { viewTarget.az += steps * Math.PI / 4; },
+    onAnchors(fn) { anchorListener = fn; },
     update(s, gateState) {
       state = s;
       gate = gateState;

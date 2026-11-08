@@ -80,3 +80,11 @@ def test_session_time_and_no_compensation_key():
     m.update(31000, ACTIVE, _v(0), _g(False))
     snap = m.snapshot()
     assert snap["session_s"] == 30 and "compensation_count" not in snap
+
+
+def test_finger_peak_range_of_motion():
+    m = SessionMetrics()
+    m.update(0, ACTIVE, _v(0.2), GateOutput(True, True, (10, 40, 30, 20, 0), "G", 0))
+    m.update(20, ACTIVE, _v(0.5), GateOutput(True, True, (60, 20, 90, 20, 5), "G", 0))
+    assert m.snapshot()["finger_peak_deg"] == [60, 40, 90, 20, 5]
+    assert SessionMetrics().snapshot()["finger_peak_deg"] == [0, 0, 0, 0, 0]

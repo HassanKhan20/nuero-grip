@@ -8,15 +8,15 @@ const icon = (name) => `<svg><use href="#i-${name}"/></svg>`;
 
 // ---------- conditions ----------
 const CONDITIONS = {
-  stroke: { title: "Stroke recovery", note: () => "Moves only while you try",
+  stroke: { title: "Stroke recovery", mark: "STROKE", note: () => "Moves only while you try",
     stats: ["reps", "activation", "session", "difficulty"] },
-  parkinsons: { title: "Parkinson's", note: (s) => (s.tremor_hz > 0 ? `Tremor ${s.tremor_hz.toFixed(1)} Hz` : "No tremor detected"),
+  parkinsons: { title: "Parkinson's", mark: "TREMOR", note: (s) => (s.tremor_hz > 0 ? `Tremor ${s.tremor_hz.toFixed(1)} Hz` : "No tremor detected"),
     stats: ["tremor", "steadiness", "taprate", "tapdec"], test: "tap" },
-  phantom: { title: "Phantom limb", note: () => "Mirrored hand for mirror therapy",
+  phantom: { title: "Phantom limb", mark: "MIRROR", note: () => "Mirrored hand for mirror therapy",
     stats: ["reps", "activation", "session", "difficulty"] },
-  cp: { title: "Cerebral palsy", note: () => "Child-size hand · joint color shows flexion",
+  cp: { title: "Cerebral palsy", mark: "CP", note: () => "Child-size hand · joint color shows flexion",
     stats: ["reps", "activation", "session", "difficulty"] },
-  cognitive: { title: "Cognitive screening", note: () => "Squeeze when the screen flashes",
+  cognitive: { title: "Cognitive screening", mark: "REACT", note: () => "Squeeze when the screen flashes",
     stats: ["rtMean", "rtLast", "rtTrials", "rtTrend"], test: "reaction" },
 };
 
@@ -97,15 +97,28 @@ function beep(hz = 1200, ms = 180) {
 let hand = null;
 try {
   const m = await import("./hand3d.js");
-  if (m.supportsWebGL()) hand = m.createHand3D($("hand3d"));
+  if (m.supportsWebGL()) {
+    hand = m.createHand3D($("hand3d"));
+    hand.onAnchors((a) => drawLeaders(a));
+  }
 } catch (err) {
   console.warn("3D hand unavailable, using flat hand", err);
 }
 if (!hand) {
   $("hand3d").classList.add("flat");
   const flat = createHand($("hand3d"));
-  hand = { update: (s, g) => flat.update(s.angles, g) };
+  hand = { update: (s, g) => flat.update(s.angles, g), setView() {}, rotate() {} };
+  $("leaders").hidden = true;
+  document.querySelector(".view-bar").hidden = true;
 }
+document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
+  hand.setView(b.dataset.view);
+  document.querySelectorAll("[data-view]").forEach((x) => x.classList.toggle("on", x === b));
+}));
+document.querySelectorAll("[data-rot]").forEach((b) => b.addEventListener("click", () => {
+  hand.rotate(Number(b.dataset.rot));
+  document.querySelectorAll("[data-view]").forEach((x) => x.classList.remove("on"));
+}));
 
 function gateState(s) {
   if (!s.sensors_ok) return ["Sensors offline", "bad", "blocked"];
@@ -117,7 +130,7 @@ function gateState(s) {
 }
 
 // ---------- sheets (dialogs) ----------
-const dockButtons = document.querySelectorAll(".dock-btn[data-sheet]");
+const dockButtons = document.querySelectorAll(".icon-btn[data-sheet]");
 function openSheet(id) {
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
   dockButtons.forEach((b) => b.classList.toggle("on", b.dataset.sheet === id));
@@ -137,14 +150,57 @@ function applyCondition(mode) {
   setText("cond-title", c.title);
   document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
   $("stats").replaceChildren(...c.stats.map((key) => {
-    const [label, ic] = STATS[key];
-    const li = document.createElement("li");
-    li.innerHTML = `<span class="ico">${icon(ic)}</span><span class="name"></span><b data-stat="${key}">—</b>`;
-    li.querySelector(".name").textContent = label;
-    return li;
+    const item = document.createElement("div");
+    item.className = "spec-item";
+    item.innerHTML = `<span></span><b data-stat="${key}">—</b>`;
+    item.querySelector("span").textContent = STATS[key][0];
+    return item;
   }));
+  setText("watermark", c.mark);
+  const hasTest = role === "therapist" && !!c.test;
   if ($("test-tap")) $("test-tap").hidden = c.test !== "tap";
   if ($("test-reaction")) $("test-reaction").hidden = c.test !== "reaction";
+  $("cam-card").hidden = hasTest; // one context card: the condition's test, otherwise the camera
+}
+
+// ---------- finger callouts + leader lines ----------
+const FINGER_KEYS = ["thumb", "index", "middle", "ring", "pinky"];
+const callouts = Object.fromEntries([...document.querySelectorAll(".callout")].map((el) => [el.dataset.anchor, el]));
+function renderCallouts(s) {
+  const peaks = s.finger_peak_deg || [0, 0, 0, 0, 0];
+  FINGER_KEYS.forEach((k, i) => {
+    const el = callouts[k];
+    if (!el) return;
+    const now = s.angles[i] || 0, peak = peaks[i] || 0;
+    el.querySelector('[data-co="now"]').textContent = `${now}°`;
+    el.querySelector('[data-co="pct"]').textContent = `${Math.round((now / 160) * 100)}% closed`;
+    el.querySelector('[data-co="bar"]').style.width = `${(now / 160) * 100}%`;
+    el.querySelector('[data-co="peak"]').style.left = `calc(${(peak / 160) * 100}% - 1px)`;
+    el.querySelector('[data-co="peaklabel"]').textContent = `Peak ${peak}° · ${Math.round((peak / 160) * 100)}% range this session`;
+  });
+  const w = callouts.wrist;
+  if (w) {
+    w.querySelector('[data-co="intent"]').textContent = s.intent_strength.toFixed(2);
+    w.querySelector('[data-co="tremor"]').textContent = s.tremor_hz > 0 ? `${s.tremor_hz.toFixed(1)} Hz` : "None";
+  }
+}
+
+const leaders = $("leaders");
+const stageEl = $("stage");
+function drawLeaders(anchors) {
+  const sr = stageEl.getBoundingClientRect();
+  if (!sr.width) return;
+  let html = "";
+  for (const [key, el] of Object.entries(callouts)) {
+    const a = anchors[key];
+    if (!a) continue;
+    const r = el.getBoundingClientRect();
+    const left = el.closest(".callouts").classList.contains("left");
+    const x0 = (left ? r.right : r.left) - sr.left, y0 = r.top + r.height / 2 - sr.top;
+    const elbow = x0 + (left ? 18 : -18);
+    html += `<path d="M${x0},${y0} H${elbow} L${a.x},${a.y}"/><circle cx="${a.x}" cy="${a.y}" r="3.5"/>`;
+  }
+  leaders.innerHTML = html;
 }
 
 // ---------- camera mini panel ----------
@@ -231,7 +287,7 @@ function eventItem(e) {
   const [label, sev, ic] = EVENTS[e.type] || [e.type, "info", "list"];
   const li = document.createElement("li");
   li.className = sev;
-  li.innerHTML = `<span class="ico">${icon(ic)}</span><span class="what"><span></span><small></small></span><span class="sev"></span>`;
+  li.innerHTML = `<span class="what"><span></span><small></small></span><span class="sev"></span>`;
   li.querySelector(".what span").textContent = e.message || label + (e.ms !== undefined ? ` · ${e.ms} ms` : "");
   li.querySelector(".what small").textContent = `${fmtClock(e.t || 0)}${e.message ? ` · ${label}` : ""}`;
   li.querySelector(".sev").textContent = SEV_LABEL[sev];
@@ -243,15 +299,11 @@ function renderEvents(events) {
   if (sig === lastEventsSig) return;
   lastEventsSig = sig;
   const recent = [...shown].reverse();
-  const rank = { bad: 0, warn: 1, info: 2 };
-  const top = [...recent].sort((a, b) => rank[EVENTS[a.type][1]] - rank[EVENTS[b.type][1]]).slice(0, 3);
-  const empty = () => { const li = document.createElement("li"); li.className = "empty"; li.textContent = "Nothing needs attention"; return li; };
-  $("event-log").replaceChildren(...(top.length ? top.map(eventItem) : [empty()]));
+  const empty = () => { const li = document.createElement("li"); li.className = "empty"; li.textContent = "Nothing yet"; return li; };
   $("event-log-all").replaceChildren(...(recent.length ? recent.map(eventItem) : [empty()]));
-  setText("btn-all", `View all (${recent.length})`);
-  $("btn-all").hidden = !recent.length;
   const flagged = recent.filter((e) => EVENTS[e.type][1] !== "info").length;
-  setText("attn-count", flagged ? `${flagged} flagged` : "Live");
+  setText("attn-badge", flagged);
+  $("attn-badge").hidden = !flagged;
 }
 
 // ---------- tap results ----------
@@ -336,6 +388,7 @@ function render(s) {
   pill.className = `pill ${cls}`;
   hand.update(s, handState);
 
+  renderCallouts(s);
   renderCamera(s);
   renderControl(s);
   renderOverlays(s);

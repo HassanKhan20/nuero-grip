@@ -21,6 +21,7 @@ class SessionMetrics:
         self._target_frames = 0
         self._open_frames = 0
         self._first_ms: int | None = None
+        self.finger_peak = [0, 0, 0, 0, 0]  # highest servo angle per finger this session (range of motion)
         self._last_ms = 0
         self.events: deque[dict] = deque(maxlen=50)
         self._cue_ms: int | None = None
@@ -56,6 +57,7 @@ class SessionMetrics:
 
         if self._first_ms is None:
             self._first_ms = t_ms
+        self.finger_peak = [max(p, a) for p, a in zip(self.finger_peak, gate.angles)]
         self._last_ms = t_ms
 
         grip = peak is not None and peak >= REP_HIGH
@@ -82,6 +84,7 @@ class SessionMetrics:
         return {
             "reps": self.reps,
             "activation_rate": round(100 * self._open_frames / self._target_frames, 1) if self._target_frames else 0.0,
+            "finger_peak_deg": list(self.finger_peak),
             "session_s": round((self._last_ms - self._first_ms) / 1000) if self._first_ms is not None else 0,
             "events": list(self.events),
             "latency_ms_mean": round(sum(self.latencies) / len(self.latencies)) if self.latencies else None,

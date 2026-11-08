@@ -13,159 +13,178 @@
 </head>
 <body data-role="{{ role }}" class="app">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 5h7v7H4zM13 5h7v7h-7zM4 14h7v5H4zM13 14h7v5h-7z"/></symbol>
   <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.4 3-5 6-5s5.4 1.6 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14c2.4.1 4.3 1.5 5 4.5"/></symbol>
   <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
   <symbol id="i-exit" viewBox="0 0 24 24"><path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10"/></symbol>
-  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
-  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 3l3 3-3 3M4 11V9a3 3 0 0 1 3-3h13M7 21l-3-3 3-3M20 13v2a3 3 0 0 1-3 3H4"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7M12 17.2v.1"/></symbol>
+  <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
   <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></symbol>
-  <symbol id="i-level" viewBox="0 0 24 24"><path d="M5 19v-4M10 19v-8M15 19v-11M20 19V5"/></symbol>
-  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-2h5"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l3 2M10 3h4"/></symbol>
   <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".8"/></symbol>
   <symbol id="i-tap" viewBox="0 0 24 24"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 10.5V9a1.5 1.5 0 0 1 3 0v2M15 10.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4 15.5a1.5 1.5 0 0 1 2.4-1.8L9 16"/></symbol>
-  <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l3 2M10 3h4"/></symbol>
-  <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 7-8M15 7h5v5"/></symbol>
-  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7M12 17.2v.1"/></symbol>
-  <symbol id="i-hash" viewBox="0 0 24 24"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"/></symbol>
+  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-2h5"/></symbol>
 </svg>
 
-<div class="shell">
-  <nav class="dock" aria-label="Main">
-    <span class="logo" aria-hidden="true"></span>
-    <button type="button" class="dock-btn on" data-sheet="" aria-label="Session" title="Session"><svg><use href="#i-home"/></svg></button>
-    {% if role == 'therapist' %}
-    <button type="button" class="dock-btn" data-sheet="sheet-caseload" aria-label="Caseload" title="Caseload"><svg><use href="#i-people"/></svg></button>
-    {% endif %}
-    <button type="button" class="dock-btn" data-sheet="sheet-sensors" aria-label="Sensors" title="Sensors"><svg><use href="#i-sliders"/></svg></button>
-    <button type="button" class="dock-btn" data-sheet="sheet-activity" aria-label="Activity" title="Activity"><svg><use href="#i-list"/></svg></button>
-    <button type="button" id="btn-tour" class="dock-btn end" aria-label="Show tour" title="Show tour"><svg><use href="#i-help"/></svg></button>
-    <a class="dock-btn" href="/logout" aria-label="Sign out" title="Sign out"><svg><use href="#i-exit"/></svg></a>
+<header class="nav">
+  <div class="nav-left"><span class="logo" aria-hidden="true"></span><b>NeuroGrip</b></div>
+  <nav class="tabs" aria-label="Condition">
+    {% for key, label in [('stroke', 'Stroke'), ('parkinsons', "Parkinson's"), ('phantom', 'Phantom limb'), ('cp', 'Cerebral palsy'), ('cognitive', 'Cognitive')] %}
+    <button type="button" data-mode="{{ key }}">{{ label }}</button>
+    {% endfor %}
   </nav>
+  <div class="nav-right">
+    <span class="status"><span id="conn-dot" class="dot"></span><span id="source-label">Connecting</span></span>
+    {% if role == 'therapist' %}<button type="button" class="icon-btn" data-sheet="sheet-caseload" aria-label="Caseload" title="Caseload"><svg><use href="#i-people"/></svg></button>{% endif %}
+    <button type="button" class="icon-btn" data-sheet="sheet-activity" aria-label="Activity" title="Activity"><svg><use href="#i-list"/></svg><span id="attn-badge" class="badge" hidden></span></button>
+    <button type="button" class="icon-btn" data-sheet="sheet-sensors" aria-label="Sensors and calibration" title="Sensors and calibration"><svg><use href="#i-sliders"/></svg></button>
+    <button type="button" id="btn-tour" class="icon-btn" aria-label="Show tour" title="Show tour"><svg><use href="#i-help"/></svg></button>
+    <a class="icon-btn" href="/logout" aria-label="Sign out" title="Sign out ({{ role }})"><svg><use href="#i-exit"/></svg></a>
+  </div>
+</header>
 
-  <main class="window">
-    <div id="hand3d" class="scene"></div>
-
-    <div class="tabs-wrap">
-      <nav class="tabs" aria-label="Condition">
-        {% for key, label in [('stroke', 'Stroke'), ('parkinsons', "Parkinson's"), ('phantom', 'Phantom'), ('cp', 'CP'), ('cognitive', 'Cognitive')] %}
-        <button type="button" data-mode="{{ key }}">{{ label }}</button>
-        {% endfor %}
-      </nav>
+<main class="page">
+  <section class="stage" id="stage">
+    <div class="stage-title">
+      <h1 id="cond-title">Stroke recovery</h1>
+      <p id="cond-note" class="sub"></p>
+      <span id="gate-status" class="pill">—</span>
     </div>
-    <div class="status-chip"><span id="conn-dot" class="dot"></span><span id="source-label">Connecting</span><span class="sep">·</span><span class="role">{{ role }}</span></div>
+    <div id="watermark" class="watermark" aria-hidden="true">STROKE</div>
+    <div id="hand3d" class="scene"></div>
+    <svg id="leaders" class="leaders" aria-hidden="true"></svg>
 
-    <section class="col left">
-      <article class="panel">
-        <header class="panel-head"><h2>Intent</h2><b id="intent-val" class="num">0.00</b></header>
-        <div class="spark-wrap">
-          <svg id="wave" class="wave" viewBox="0 0 200 44" preserveAspectRatio="none" aria-label="Intent, last 10 seconds">
-            <line x1="0" y1="22" x2="200" y2="22" class="threshold"/>
-            <polyline id="wave-line" points=""/><circle id="wave-dot" r="2.5" hidden/>
-          </svg>
-          <div id="wave-tip" class="tip" hidden></div>
-        </div>
-        <div class="axis"><span>−10 s</span><span id="intent-label">Calibrating</span><span>now</span></div>
-        <div id="sim-intent">
-          <button type="button" id="btn-hold" class="btn primary block hold">Hold to try</button>
-          <p class="hint">or hold <kbd>Space</kbd></p>
-        </div>
-        <p id="hw-intent" class="hint" hidden>Headband connected</p>
-      </article>
-
-      <article class="panel">
-        <header class="panel-head"><h2 id="stats-title">{% if role == 'therapist' %}Motor function status{% else %}Today{% endif %}</h2></header>
-        <ul id="stats" class="rows"></ul>
-      </article>
-
-      {% if role == 'therapist' %}
-      <article id="test-tap" class="panel" hidden>
-        <header class="panel-head"><h2>Finger-tap test</h2><span class="tag">Screening</span></header>
-        <p class="sub">10 s of thumb–index tapping</p>
-        <dl id="tap-results" class="mini-stats" hidden>
-          <div><dt>Taps</dt><dd id="tap-taps">—</dd></div>
-          <div><dt>Rate</dt><dd id="tap-rate">—</dd></div>
-          <div><dt>Decrement</dt><dd id="tap-dec">—</dd></div>
-          <div><dt>Rhythm</dt><dd id="tap-cv">—</dd></div>
-        </dl>
-        <p id="tap-flag" class="flag" hidden></p>
-        <button type="button" id="btn-tap" class="btn primary block">Start test</button>
-      </article>
-
-      <article id="test-reaction" class="panel" hidden>
-        <header class="panel-head"><h2>Reaction test</h2><span class="tag">Screening</span></header>
-        <p class="sub" id="cue-status">Cue appears after 1–3 s</p>
-        <div id="trials-wrap" class="trials-wrap" hidden>
-          <svg id="trials" class="trials" viewBox="0 0 200 60" preserveAspectRatio="none" aria-label="Last 10 reaction times"></svg>
-          <div id="trials-tip" class="tip" hidden></div>
-        </div>
-        <button type="button" id="btn-cue" class="btn primary block">Start test</button>
-      </article>
-      {% endif %}
-    </section>
-
-    <section class="col right">
-      <article class="panel">
-        <header class="panel-head"><h2>Needs attention</h2><span class="tag" id="attn-count">Live</span></header>
-        <ul id="event-log" class="attention"></ul>
-        <button type="button" id="btn-all" class="btn primary block" data-sheet="sheet-activity">View all</button>
-      </article>
-
-      {% if role == 'therapist' %}
-      <article class="panel">
-        <header class="panel-head"><h2>Session review</h2><span class="tag">Nemotron</span></header>
-        <p id="agent-status" class="sub">Reviews the session, sets the next difficulty and writes a report.</p>
-        <p id="agent-preview" class="preview" hidden></p>
-        <div class="btn-row">
-          <button type="button" id="btn-agent" class="btn primary">Review session</button>
-          <button type="button" id="btn-end" class="btn ghost">End session</button>
-          <button type="button" id="btn-report" class="btn link" hidden>Open report</button>
-        </div>
-      </article>
-      {% else %}
-      <article class="panel">
-        <header class="panel-head"><h2>Your progress</h2><span class="tag">Gemini</span></header>
-        <p id="explain-status" class="sub"></p>
-        <p id="explain-text" class="summary"></p>
-        <button type="button" id="btn-explain" class="btn primary block">Explain my progress</button>
-      </article>
-      {% endif %}
-
-      <article class="panel cam-panel">
-        <header class="panel-head"><h2>Camera</h2><span class="tag" id="cam-tag">Off</span></header>
-        <div class="cam-box">
-          <img id="cam" alt="Camera view of the healthy hand" hidden>
-          <p id="cam-msg" class="cam-msg">No camera</p>
-        </div>
-        <div class="legend"><span class="lg good">Moving</span><span class="lg bad">Offline</span><span class="lg idle">Waiting</span></div>
-      </article>
-    </section>
-
-    <div class="control-dock">
-      <p id="cond-note" class="cond-note"></p>
-      <div class="dock-row">
-        <span id="gate-status" class="pill">—</span>
-        <div class="seg" role="group" aria-label="Control">
-          <button type="button" data-control="mirror">Mirror</button>
-          <button type="button" data-control="intent">Intent only</button>
-        </div>
-        <div id="grip-row" class="seg" role="group" aria-label="Grip" hidden>
-          {% for g in ['fist', 'pinch', 'point', 'wave'] %}<button type="button" data-grip="{{ g }}">{{ g|capitalize }}</button>{% endfor %}
-        </div>
+    <div class="callouts left">
+      {% for key, label, servo in [('pinky', 'Pinky', 5), ('ring', 'Ring', 4), ('middle', 'Middle', 3)] %}
+      <div class="callout" data-anchor="{{ key }}">
+        <div class="co-head"><span>{{ label }}</span><small>Servo {{ servo }}</small></div>
+        <div class="co-val"><b data-co="now">0°</b><span data-co="pct">0% closed</span></div>
+        <div class="co-bar"><i data-co="bar"></i><em data-co="peak"></em></div>
+        <small class="co-peak" data-co="peaklabel">Peak 0° this session</small>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="callouts right">
+      {% for key, label, servo in [('index', 'Index', 2), ('thumb', 'Thumb', 1)] %}
+      <div class="callout" data-anchor="{{ key }}">
+        <div class="co-head"><span>{{ label }}</span><small>Servo {{ servo }}</small></div>
+        <div class="co-val"><b data-co="now">0°</b><span data-co="pct">0% closed</span></div>
+        <div class="co-bar"><i data-co="bar"></i><em data-co="peak"></em></div>
+        <small class="co-peak" data-co="peaklabel">Peak 0° this session</small>
+      </div>
+      {% endfor %}
+      <div class="callout wrist" data-anchor="wrist">
+        <div class="co-head"><span>Wrist</span><small>Sensors</small></div>
+        <div class="co-pair"><span>Intent</span><b data-co="intent">0.00</b></div>
+        <div class="co-pair"><span>Tremor</span><b data-co="tremor">None</b></div>
       </div>
     </div>
-    <h1 id="cond-title" class="sr-only">Stroke recovery</h1>
-  </main>
-</div>
+
+    <div class="view-bar" role="group" aria-label="View">
+      <button type="button" data-view="front">Front</button>
+      <button type="button" data-view="palm" class="on">3/4</button>
+      <button type="button" data-view="side">Side</button>
+      <span class="sep"></span>
+      <button type="button" class="rot" data-rot="-1" aria-label="Rotate left"><svg><use href="#i-chev-l"/></svg></button>
+      <span class="deg">360°</span>
+      <button type="button" class="rot" data-rot="1" aria-label="Rotate right"><svg><use href="#i-chev-r"/></svg></button>
+    </div>
+  </section>
+
+  <section class="under">
+    <div class="control-row">
+      <div class="seg" role="group" aria-label="Control">
+        <button type="button" data-control="mirror">Mirror camera</button>
+        <button type="button" data-control="intent">Intent only</button>
+      </div>
+      <div id="grip-row" class="seg" role="group" aria-label="Grip" hidden>
+        {% for g in ['fist', 'pinch', 'point', 'wave'] %}<button type="button" data-grip="{{ g }}">{{ g|capitalize }}</button>{% endfor %}
+      </div>
+    </div>
+    <div id="stats" class="spec" aria-label="{% if role == 'therapist' %}Motor function status{% else %}Today{% endif %}"></div>
+  </section>
+
+  <section class="cards">
+    <article class="card card-intent">
+      <header class="card-head"><h2>Intent</h2><b id="intent-val" class="num">0.00</b></header>
+      <div class="spark-wrap">
+        <svg id="wave" class="wave" viewBox="0 0 200 44" preserveAspectRatio="none" aria-label="Intent, last 10 seconds">
+          <line x1="0" y1="22" x2="200" y2="22" class="threshold"/>
+          <polyline id="wave-line" points=""/><circle id="wave-dot" r="2.5" hidden/>
+        </svg>
+        <div id="wave-tip" class="tip" hidden></div>
+      </div>
+      <div class="axis"><span>−10 s</span><span id="intent-label">Calibrating</span><span>now</span></div>
+      <div id="sim-intent" class="hold-row">
+        <button type="button" id="btn-hold" class="btn primary hold">Hold to try</button>
+        <span class="hint">or hold <kbd>Space</kbd></span>
+      </div>
+      <p id="hw-intent" class="hint" hidden>Headband connected</p>
+    </article>
+
+    {% if role == 'therapist' %}
+    <article class="card card-review">
+      <header class="card-head"><h2>Session overview</h2><span class="tag">NVIDIA Nemotron</span></header>
+      <p id="agent-status" class="sub">Reviews the session, sets the next difficulty and writes a report.</p>
+      <p id="agent-preview" class="preview" hidden></p>
+      <div class="btn-row">
+        <button type="button" id="btn-agent" class="btn primary">Review session</button>
+        <button type="button" id="btn-end" class="btn ghost">End session</button>
+        <button type="button" id="btn-report" class="btn link" hidden>Open report</button>
+      </div>
+    </article>
+    {% else %}
+    <article class="card card-review">
+      <header class="card-head"><h2>Your progress</h2><span class="tag">Gemini</span></header>
+      <p id="explain-status" class="sub"></p>
+      <p id="explain-text" class="preview" hidden></p>
+      <button type="button" id="btn-explain" class="btn primary">Explain my progress</button>
+    </article>
+    {% endif %}
+
+    {% if role == 'therapist' %}
+    <article id="test-tap" class="card" hidden>
+      <header class="card-head"><h2>Finger-tap test</h2><span class="tag">Screening</span></header>
+      <p class="sub">10 s of thumb–index tapping</p>
+      <dl id="tap-results" class="mini-stats" hidden>
+        <div><dt>Taps</dt><dd id="tap-taps">—</dd></div>
+        <div><dt>Rate</dt><dd id="tap-rate">—</dd></div>
+        <div><dt>Decrement</dt><dd id="tap-dec">—</dd></div>
+        <div><dt>Rhythm</dt><dd id="tap-cv">—</dd></div>
+      </dl>
+      <p id="tap-flag" class="flag" hidden></p>
+      <button type="button" id="btn-tap" class="btn primary">Start test</button>
+    </article>
+
+    <article id="test-reaction" class="card" hidden>
+      <header class="card-head"><h2>Reaction test</h2><span class="tag">Screening</span></header>
+      <p class="sub" id="cue-status">Cue appears after 1–3 s</p>
+      <div id="trials-wrap" class="trials-wrap" hidden>
+        <svg id="trials" class="trials" viewBox="0 0 200 60" preserveAspectRatio="none" aria-label="Last 10 reaction times"></svg>
+        <div id="trials-tip" class="tip" hidden></div>
+      </div>
+      <button type="button" id="btn-cue" class="btn primary">Start test</button>
+    </article>
+    {% endif %}
+
+    <article id="cam-card" class="card cam-card">
+      <header class="card-head"><h2>Camera</h2><span class="tag" id="cam-tag">Off</span></header>
+      <div class="cam-box">
+        <img id="cam" alt="Camera view of the healthy hand" hidden>
+        <p id="cam-msg" class="cam-msg">No camera</p>
+      </div>
+    </article>
+  </section>
+</main>
 
 <dialog id="sheet-activity" class="sheet">
-  <header class="panel-head"><h2>Activity</h2><button type="button" class="close" aria-label="Close">×</button></header>
+  <header class="card-head"><h2>Activity</h2><button type="button" class="close" aria-label="Close">×</button></header>
   <ul id="event-log-all" class="attention"></ul>
 </dialog>
 
 <dialog id="sheet-sensors" class="sheet">
-  <header class="panel-head"><h2>Sensors</h2><button type="button" class="close" aria-label="Close">×</button></header>
+  <header class="card-head"><h2>Sensors and calibration</h2><button type="button" class="close" aria-label="Close">×</button></header>
   <div class="pads">
     <div><span>Temple pad</span><b id="pad-temple">—</b><small id="pad-temple-d"></small></div>
     <div><span>Forearm pad</span><b id="pad-forearm">—</b><small id="pad-forearm-d"></small></div>
@@ -200,7 +219,7 @@
 </dialog>
 
 <dialog id="sheet-caseload" class="sheet wide">
-  <header class="panel-head"><h2>Caseload</h2>
+  <header class="card-head"><h2>Caseload</h2>
     <div class="btn-row no-print"><button type="button" id="btn-caseload-pdf" class="btn ghost" data-print="caseload" hidden>Export PDF</button><button type="button" class="close" aria-label="Close">×</button></div>
   </header>
   <p id="caseload-meta" class="sub print-only"></p>
