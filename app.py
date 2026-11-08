@@ -53,7 +53,9 @@ def load_secret(path: Path = SECRET_FILE) -> str:
 def create_app(engine, start: bool = True):
     app = Flask(__name__)
     app.secret_key = load_secret()
-    app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict")
+    # TEMPLATES_AUTO_RELOAD: a pulled update shows up on refresh; without it a running app keeps old
+    # HTML in memory while serving the new JS from disk, and the page breaks until a restart
+    app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict", TEMPLATES_AUTO_RELOAD=True)
     socketio = SocketIO(app, async_mode="threading")
     RESPONDERS = "responders"  # socket room: incident and audit traffic only reaches therapists
 
