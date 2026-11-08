@@ -24,6 +24,8 @@ NOISE_TRIGGER = 2.5                        # the trigger never sits closer than 
 SITE_NAMES = ("temple", "forearm")
 # After calibration (the capacitive pad is noisy: pressure, head movement, a hand on the power bank all move it):
 ARTIFACT_RATIO = 2.5    # a change > 2.5x this person's full focus isn't real focus: the pad moved / contact changed
+ARTIFACT_MIN = 0.05      # ...and never below 5%: real focus moved this pad up to ~2.2%, so a light-focus
+                        # calibration must not turn a strong focus into an "artifact" (scored 0, then re-zeroed)
 ARTIFACT_REZERO = 100   # ~2 s of continuous artifact = new resting level (headband re-seated): re-zero to it
 DEBOUNCE_FRAMES = 4     # ~80 ms over the threshold before the hand moves (ignores one-frame blips)
 DRIFT_ALPHA = 0.004     # while clearly relaxed, the baseline follows slow drift (~5 s time constant at 50 Hz)
@@ -155,7 +157,7 @@ class IntentDetector:
         dirs = getattr(self, "_dir", (1, 1))
         # signed change: only movement in this person's effort direction counts
         signed = [dirs[i] * (base[i] - raw[i]) / base[i] if base[i] else 0.0 for i in (0, 1)]
-        if any(abs(signed[i]) > ARTIFACT_RATIO * self.full[i] for i in self._idx):
+        if any(abs(signed[i]) > max(ARTIFACT_RATIO * self.full[i], ARTIFACT_MIN) for i in self._idx):
             self._above = 0
             self._artifact_frames = getattr(self, "_artifact_frames", 0) + 1
             if self._artifact_frames >= ARTIFACT_REZERO:  # it stayed there: that's the new resting level
