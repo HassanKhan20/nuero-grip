@@ -95,7 +95,11 @@ class SerialSource:
                 log.warning("serial read failed (%s); reconnecting", e)
                 self._reconnect()
                 continue
-            frame = parse_sensor_line(raw.decode("ascii", errors="ignore"))
+            line = raw.decode("ascii", errors="ignore")
+            if line.startswith("#"):  # board info: servo angles written, headband link up/lost
+                log.info("board: %s", line.strip())
+                continue
+            frame = parse_sensor_line(line)
             if frame is not None:
                 return frame
 
