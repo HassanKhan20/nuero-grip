@@ -1,6 +1,6 @@
 import { createHand } from "./hand.js";
 import { createTour } from "./onboarding.js";
-import { initCommandCenter, initSurge } from "./command.js";
+import { api, toast, initShell } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
 const role = document.body.dataset.role;
@@ -57,24 +57,6 @@ const SEV_LABEL = { bad: "High", warn: "Medium", info: "Info" };
 const SOURCE_LABELS = { mock: "Simulated", camera: "Camera", hardware: "Headband" };
 
 // ---------- helpers ----------
-async function api(path, method = "POST", body) {
-  const res = await fetch(path, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
-}
-
-function toast(msg) {
-  const t = $("toast");
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { t.hidden = true; }, 3500);
-}
 const fail = (err) => toast(err.message);
 
 const fmtClock = (ms) => {
@@ -422,7 +404,7 @@ const tour = createTour({ role, api, toast });
 $("btn-tour").addEventListener("click", () => tour.start());
 
 // ---------- socket ----------
-const socket = io();
+const { socket } = initShell();
 socket.on("connect", () => $("conn-dot").classList.add("live"));
 // a refused connection usually means the login expired: go to the login page instead of hanging on "Connecting"
 socket.on("connect_error", async () => {
@@ -485,110 +467,7 @@ if (role === "therapist") {
   $("btn-cue").onclick = () => api("/api/latency").catch(fail);
   $("btn-tap").onclick = () => api("/api/tapping", "POST", { seconds: 10 }).catch(fail);
 
-  // ----- session report: readable agent steps + export to PDF -----
-  const ACTIONS = {
-    get_session_metrics: (a, r) => ["Read this session",
-      `${r.reps ?? 0} reps · ${Math.round(r.activation_rate ?? 0)}% activation · ${fmtClock((r.session_s || 0) * 1000)} long`],
-    get_patient_history: (a, r) => ["Compared with past sessions",
-      Array.isArray(r) ? (r.length ? `${r.length} previous session${r.length > 1 ? "s" : ""} on record` : "No previous sessions on record") : ""],
-    set_difficulty: (a, r, ctx) => {
-      const to = r.level ?? a.level;
-      const from = ctx.before;
-      const title = from == null || from === to ? `Kept difficulty at ${to}`
-        : `${to < from ? "Lowered" : "Raised"} difficulty from ${from} to ${to}`;
-      return [title, a.reason || r.reason || ""];
-    },
-    trigger_feedback: (a) => [a.kind === "celebrate" ? "Sent a celebration cue" : "Sent an alert to the dashboard", a.message || ""],
-  };
-  let lastReport = null;
-
-  function buildReport(r, snap, startedAt) {
-    const ctx = { before: snap?.difficulty ?? null };
-    const metricsStep = r.trace.find((t) => t.tool === "get_session_metrics" && !t.result?.error);
-    if (metricsStep?.result?.difficulty != null) ctx.before = metricsStep.result.difficulty;
-    const steps = r.trace.map((t) => {
-      const fn = ACTIONS[t.tool];
-      const [title, detail] = t.result?.error ? [`${t.tool} failed`, t.result.error]
-        : fn ? fn(t.args || {}, t.result || {}, ctx) : [t.tool, ""];
-      return { title, detail, reasoning: t.reasoning || "" };
-    });
-    const setStep = [...r.trace].reverse().find((t) => t.tool === "set_difficulty" && !t.result?.error);
-    const after = setStep ? (setStep.result.level ?? setStep.args.level) : ctx.before;
-    // show the numbers the agent actually analyzed, not the screen at click time
-    const analyzed = metricsStep ? { ...(snap || {}), ...metricsStep.result } : (snap || {});
-    return { r, snap: analyzed, steps, before: ctx.before, after, at: startedAt };
-  }
-
-  function renderReport(rep) {
-    const s = rep.snap;
-    const cond = CONDITIONS[s.mode] || CONDITIONS.stroke;
-    const when = rep.at.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
-    setText("rep-meta", `Patient ${s.patient_id || "demo"} · ${cond.title} · ${when} · ${fmtClock((s.session_s || 0) * 1000)} session`);
-    const cards = cond.stats.filter((k) => k !== "difficulty").map((k) => [STATS[k][0], STATS[k][2](s)]);
-    cards.push(["Difficulty", rep.before != null && rep.after !== rep.before ? `${rep.before} → ${rep.after}` : `${rep.after ?? "—"}`]);
-    $("rep-metrics").replaceChildren(...cards.map(([label, value]) => {
-      const d = document.createElement("div");
-      d.innerHTML = "<span></span><b></b>";
-      d.querySelector("span").textContent = label;
-      d.querySelector("b").textContent = value;
-      return d;
-    }));
-    setText("rep-summary", rep.r.summary || "No summary returned.");
-    setText("rep-plan", rep.r.next_session_plan || "—");
-    $("rep-steps").replaceChildren(...rep.steps.map((st) => {
-      const li = document.createElement("li");
-      const title = document.createElement("b");
-      title.textContent = st.title;
-      li.append(title);
-      if (st.detail) {
-        const p = document.createElement("p");
-        p.textContent = st.detail;
-        li.append(p);
-      }
-      if (st.reasoning) {
-        const det = document.createElement("details");
-        det.className = "no-print";
-        det.innerHTML = "<summary>Agent reasoning</summary><p></p>";
-        det.querySelector("p").textContent = st.reasoning;
-        li.append(det);
-      }
-      return li;
-    }));
-    if (!rep.steps.length) $("rep-steps").innerHTML = "<li><b>Answered without using tools</b></li>";
-  }
-
-  const review = async () => {
-    const btn = $("btn-agent");
-    btn.disabled = true;
-    setText("agent-status", "Nemotron is reviewing the session… about 15 s");
-    const snap = lastState;
-    const startedAt = new Date();
-    try {
-      const r = await api("/api/agent");
-      lastReport = buildReport(r, snap, startedAt);
-      renderReport(lastReport);
-      setText("agent-status", `Reviewed ${startedAt.toLocaleTimeString([], { timeStyle: "short" })}`);
-      $("agent-preview").textContent = r.summary || "";
-      $("agent-preview").hidden = !r.summary;
-      $("btn-report").hidden = false;
-      openSheet("sheet-report");
-    } catch (err) {
-      setText("agent-status", err.message);
-    } finally {
-      btn.disabled = false;
-    }
-  };
-  $("btn-report").onclick = () => { if (lastReport) openSheet("sheet-report"); };
-
-  // Export PDF: print just the open sheet; the browser's "Save as PDF" names the file from the title
-  document.querySelectorAll("[data-print]").forEach((b) => b.addEventListener("click", () => {
-    const original = document.title;
-    document.title = `NeuroGrip ${b.dataset.print} ${new Date().toISOString().slice(0, 10)}`;
-    window.addEventListener("afterprint", () => { document.title = original; }, { once: true });
-    window.print();
-  }));
-
-  $("btn-agent").onclick = review;
+  // the review itself runs on the AI reasoning page (/reasoning); ending a session saves it and goes there
   $("btn-end").onclick = async () => {
     try {
       await api("/api/session/end");
@@ -596,31 +475,8 @@ if (role === "therapist") {
       toast(err.message);
       return;
     }
-    toast("Session saved");
-    review(); // the agent reviews every finished session
+    location.href = "/reasoning?run=1";
   };
-
-  $("btn-triage").onclick = () => busy($("btn-triage"), "triage-status", async () => {
-    const r = await api("/api/triage", "GET");
-    const tbody = $("triage-table").querySelector("tbody");
-    const labels = { urgent: "Urgent", monitor: "Monitor", stable: "Stable" };
-    const trends = { improving: "Improving", declining: "Declining", stable: "Stable" };
-    tbody.replaceChildren(...r.patients.map((p) => {
-      const tr = document.createElement("tr");
-      [labels[p.urgency] || p.urgency, p.name, p.condition, trends[p.trend] || "—", `${p.last_session_days_ago} d`, p.reason].forEach((v, i) => {
-        const td = document.createElement("td");
-        td.textContent = v;
-        if (i === 0) td.className = `urg ${p.urgency}`;
-        if (i === 3) td.className = `trend ${p.trend || ""}`;
-        tr.append(td);
-      });
-      return tr;
-    }));
-    $("triage-table").hidden = false;
-    setText("caseload-meta", `Ranked ${new Date().toLocaleString([], { dateStyle: "medium", timeStyle: "short" })} by NVIDIA Nemotron`);
-  });
-  initCommandCenter({ api, toast, socket });
-  initSurge({ api, toast });
 } else {
   $("btn-explain").onclick = () => busy($("btn-explain"), "explain-status", async () => {
     const r = await api("/api/patient_view");

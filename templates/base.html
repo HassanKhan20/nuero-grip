@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}NeuroGrip{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
+</head>
+<body data-role="{{ role }}" data-page="{{ page }}" class="doc-page {% block body_class %}{% endblock %}">
+{% include "_icons.html" %}
+<div class="doc-shell">
+  {% include "_sysnav.html" %}
+  <main class="doc">
+    {% block hero %}{% endblock %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

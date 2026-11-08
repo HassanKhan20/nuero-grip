@@ -1,4 +1,4 @@
-// Command center (incidents + audit log) and regional surge triage. Therapist view only.
+// Command center (incidents, detectors, audit log) and regional surge triage. Full pages, therapist only.
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -25,6 +25,15 @@ const ACTIONS = {
   incident_note: "Note", incident_resolve: "Resolved", incident_reopen: "Reopened", incident_scope: "Scope changed",
 };
 
+// every detection rule that can open an incident (kinds match neurogrip/detect.py and app.py)
+const DETECTORS = [
+  ["sensor_loss", "Sensor stream lost", "Device"], ["camera_loss", "Camera offline", "Device"],
+  ["tremor", "Tremor 3.5–7.5 Hz", "Clinical"], ["slow_reaction", "Slow reaction", "Clinical"],
+  ["missed_cues", "Missed cues", "Clinical"], ["bradykinesia", "Finger-tap slowdown", "Clinical"],
+  ["failed_logins", "Repeated failed sign-ins", "Security"], ["access_denied", "Unauthorized access", "Security"],
+  ["capacity_gap", "Capacity gap", "Caseload"], ["agent:", "AI escalation", "Nemotron"],
+];
+
 function kpis(container, items) {
   container.replaceChildren(...items.map(([label, value, tone]) => {
     const d = el("div", `kpi ${tone || ""}`);
@@ -39,13 +48,19 @@ export function initCommandCenter({ api, toast, socket }) {
   let selected = null;
 
   const active = (i) => i.status !== "resolved";
-  function badge() {
-    const live = [...byId.values()].filter(active);
-    const hot = live.some((i) => i.severity === "critical" || i.severity === "high");
-    const b = $("inc-badge");
-    b.textContent = live.length;
-    b.hidden = !live.length;
-    b.classList.toggle("bad", hot);
+
+  function renderDetectors() {
+    const ul = $("cc-detectors");
+    if (!ul) return;
+    const all = [...byId.values()];
+    ul.replaceChildren(...DETECTORS.map(([kind, label, group]) => {
+      const hits = all.filter((i) => active(i) && (kind.endsWith(":") ? i.kind.startsWith(kind) : i.kind === kind));
+      const worst = ["critical", "high", "medium", "low"].find((s) => hits.some((i) => i.severity === s));
+      const li = el("li", hits.length ? `firing sev-${worst}` : "");
+      li.append(el("span", "det-dot"), el("b", "", label), el("small", "", hits.length ? `${group} · ${hits.length} active` : `${group} · watching`));
+      if (hits.length) { li.tabIndex = 0; li.onclick = () => { selected = hits[0].id; renderList(); renderDetail(); }; }
+      return li;
+    }));
   }
 
   function renderKpis() {
@@ -85,7 +100,7 @@ export function initCommandCenter({ api, toast, socket }) {
   async function act(action, body) {
     try {
       const inc = await api(`/api/incidents/${selected}/${action}`, "POST", body);
-      upsert(inc, false);
+      upsert(inc);
     } catch (err) { toast(err.message); }
   }
 
@@ -139,20 +154,14 @@ export function initCommandCenter({ api, toast, socket }) {
     tl.scrollTop = tl.scrollHeight;
   }
 
-  function upsert(inc, announce) {
-    const isNew = !byId.has(inc.id);
+  function upsert(inc) {  // new-incident toasts and the nav badge come from the shell (common.js)
     byId.set(inc.id, inc);
-    if (announce && isNew) toast(`New incident · ${inc.title}`);
-    else if (announce && inc.timeline.at(-1)?.kind === "escalated") toast(`Escalated · ${inc.title}`);
-    badge();
-    if ($("sheet-command").open) {
-      renderKpis();
-      renderList();
-      if (inc.id === selected) {
-        const typing = document.activeElement?.id === "cc-note" ? $("cc-note").value : null;
-        renderDetail();
-        if (typing !== null) { $("cc-note").value = typing; $("cc-note").focus(); }
-      }
+    if (!selected) selected = inc.id;
+    renderKpis(); renderDetectors(); renderList();
+    if (inc.id === selected) {
+      const typing = document.activeElement?.id === "cc-note" ? $("cc-note").value : null;
+      renderDetail();
+      if (typing !== null) { $("cc-note").value = typing; $("cc-note").focus(); }
     }
   }
 
@@ -161,7 +170,7 @@ export function initCommandCenter({ api, toast, socket }) {
       const r = await api("/api/incidents", "GET");
       r.incidents.forEach((i) => byId.set(i.id, i));
       if (!selected) selected = r.incidents.find(active)?.id || r.incidents[0]?.id || null;
-      badge(); renderKpis(); renderList(); renderDetail();
+      renderKpis(); renderDetectors(); renderList(); renderDetail();
     } catch (err) { toast(err.message); }
   }
 
@@ -199,18 +208,17 @@ export function initCommandCenter({ api, toast, socket }) {
     try {
       const inc = await api("/api/incidents", "POST", Object.fromEntries(f));
       selected = inc.id;
-      upsert(inc, false);
+      upsert(inc);
       closeDeclare();
       renderList(); renderDetail();
     } catch (err) { toast(err.message); }
   };
 
-  $("sheet-command").addEventListener("open-sheet", loadIncidents);
-  socket.on("incident", (inc) => upsert(inc, true));
+  socket.on("incident", upsert);
   socket.on("audit", (a) => {
-    if ($("sheet-command").open && !$("cc-audit").hidden) $("cc-audit-table").querySelector("tbody").prepend(auditRow(a));
+    if (!$("cc-audit").hidden) $("cc-audit-table").querySelector("tbody").prepend(auditRow(a));
   });
-  setInterval(() => { if ($("sheet-command").open) renderList(); }, 15000); // keep "x min ago" fresh
+  setInterval(renderList, 15000); // keep "x min ago" fresh
   loadIncidents();
 }
 
@@ -250,7 +258,7 @@ export function initSurge({ api, toast }) {
       label: t.name, value: t.assigned, max: t.capacity, text: `${t.assigned} / ${t.capacity}`,
       tone: t.assigned >= t.capacity ? "warn" : "",
     })));
-    if (data.brief) { $("surge-brief").textContent = data.brief; $("surge-brief-box").hidden = false; }
+    if (data.brief) { $("surge-brief").textContent = data.brief; $("surge-brief-box").hidden = false; $("btn-brief").textContent = "Rewrite the plan"; }
 
     const labels = { urgent: "Urgent", monitor: "Monitor", stable: "Stable" };
     const tbody = $("surge-table").querySelector("tbody");
@@ -306,5 +314,5 @@ export function initSurge({ api, toast }) {
       $("surge-status").textContent = err.message;
     } finally { btn.disabled = false; }
   };
-  $("sheet-caseload").addEventListener("open-sheet", () => { if (!data) load(); });
+  load();
 }

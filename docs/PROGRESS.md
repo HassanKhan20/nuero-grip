@@ -14,6 +14,8 @@ _Last updated: 2026-11-07_
 
 ## How NeuroGrip answers each track
 
+Each track is its own full page, linked in order from the system bar on every page: **1 Live session** (`/`, Overall) → **2 AI reasoning** (`/reasoning`, NVIDIA) → **3 Command center** (`/command`, Winstead) → **4 Surge response** (`/surge`, State Farm). Pages 2–4 are therapist only; a patient opening one gets an Access denied page and a security incident. `/mind` is the full-screen headband check.
+
 NeuroGrip is one system with three layers. Each layer is where one track's prompt is answered.
 
 ```
@@ -27,9 +29,9 @@ NeuroGrip is one system with three layers. Each layer is where one track's promp
 | Track | Their prompt | What we built for it | Where to show it |
 |---|---|---|---|
 | **Overall** | Creativity, technical skill, impact | Intent-gated robotic hand (moves only while the patient tries) plus camera screening for 5 conditions, with the detection, response and coordination layers around it | The whole demo |
-| **NVIDIA** (Nemotron beyond a chatbot) | Multi-step workflows, tool use, real-world use | A Nemotron agent with **6 tools**: reads session metrics and history, **reads the live detections**, changes difficulty, buzzes the device, and **escalates its own incidents**. Every step's reasoning is shown and exported as a PDF. It also writes the surge coordination brief. | Session review → report; Command center shows incidents opened by "Nemotron agent" |
-| **Winstead PC** (incident response command center) | Isolated secure system, access control, incident documentation with real-time updates, scope definitions, real-time comms | **Command center** (shield icon): incidents opened automatically by detection rules or declared by hand. Each has a severity, category, **scope** (patient / device / network / account), owner, status (open → acknowledged → resolved) and a timeline. **Live team messages** go on each incident and reach every signed-in therapist instantly. **Audit log** records every sign-in, failed sign-in, blocked request, AI action and incident change. **Access control:** therapist-only routes; a patient account calling one is blocked, logged, and becomes a security incident. 3 failed sign-ins in a minute open an incident; 5 lock that address out. **Isolated mode** (`NG_ISOLATED=1`): no outbound AI calls, localhost only, everything else keeps working offline. Hardened session cookie and security headers. | Shield icon in the top bar |
-| **State Farm** (disaster: thousands affected, find urgent needs, coordinate help, no one overlooked) | Identify urgent needs, coordinate assistance, nobody overlooked | **Regional surge triage**: 1,200 patients after a disaster, spread unevenly across 5 districts (the hardest-hit districts have more people cut off from care). **Every patient** gets an explainable 0–100 risk score, and the hard rule (3+ days without a session, or declining → urgent) applies to all of them. Therapists are assigned most-at-risk first, up to capacity. Whoever can't get one goes on a ranked waitlist, and a **capacity-gap incident** opens automatically, so nobody silently drops off. Nemotron reads the totals and the top patients and writes the **coordination plan** (tele-rehab, group sessions, home kits). | People icon → Regional surge → Coordination brief |
+| **NVIDIA** (Nemotron beyond a chatbot) | Multi-step workflows, tool use, real-world use | A Nemotron agent with **6 tools**: reads session metrics and history, **reads the live detections**, changes difficulty, buzzes the device, and **escalates its own incidents**. Every step's reasoning is shown and exported as a PDF. It also writes the surge coordination brief. | System 2 · `/reasoning` → Run review (reasoning chain, toolbox, next steps); Command center shows incidents opened by "Nemotron agent" |
+| **Winstead PC** (incident response command center) | Isolated secure system, access control, incident documentation with real-time updates, scope definitions, real-time comms | **Command center** (its own page, `/command`), with a live **Detectors** board showing all 10 rules: incidents opened automatically by detection rules or declared by hand. Each has a severity, category, **scope** (patient / device / network / account), owner, status (open → acknowledged → resolved) and a timeline. **Live team messages** go on each incident and reach every signed-in therapist instantly. **Audit log** records every sign-in, failed sign-in, blocked request, AI action and incident change. **Access control:** therapist-only routes; a patient account calling one is blocked, logged, and becomes a security incident. 3 failed sign-ins in a minute open an incident; 5 lock that address out. **Isolated mode** (`NG_ISOLATED=1`): no outbound AI calls, localhost only, everything else keeps working offline. Hardened session cookie and security headers. | System 3 · `/command` |
+| **State Farm** (disaster: thousands affected, find urgent needs, coordinate help, no one overlooked) | Identify urgent needs, coordinate assistance, nobody overlooked | **Regional surge triage**: 1,200 patients after a disaster, spread unevenly across 5 districts (the hardest-hit districts have more people cut off from care). **Every patient** gets an explainable 0–100 risk score, and the hard rule (3+ days without a session, or declining → urgent) applies to all of them. Therapists are assigned most-at-risk first, up to capacity. Whoever can't get one goes on a ranked waitlist, and a **capacity-gap incident** opens automatically, so nobody silently drops off. Nemotron reads the totals and the top patients and writes the **coordination plan** (tele-rehab, group sessions, home kits). | System 4 · `/surge` → Write the plan |
 | **MLH** | MongoDB, Vultr, GoDaddy, Gemini | MongoDB stores sessions, events, patients, **incidents and the audit log**. Gemini writes the patient's plain-language explanation (`gemini-3.5-flash`). Vultr/GoDaddy: see [DEPLOY.md](DEPLOY.md). | Patient login → Explain my progress |
 
 ### Detection rules (all in `neurogrip/detect.py` and `app.py`)
@@ -134,7 +136,10 @@ Each finger's servo angle = that finger's curl × 160°. Serial command: `A,<thu
 | `neurogrip/triage.py` | Caseload triage (10 patients, Nemotron) and regional surge triage (1,200 patients, rule-scored, Nemotron brief) |
 | `neurogrip/detect.py` | Live detection rules that open and auto-close incidents |
 | `neurogrip/incidents.py` | Incident log (scope, owner, status, timeline, no duplicates) and audit log |
-| `static/command.js` | Command center and surge triage UI (therapist only) |
+| `static/command.js` | Command center and surge triage logic (therapist only) |
+| `templates/_sysnav.html`, `base.html` | The system bar on every page: 1 Live session → 2 AI reasoning → 3 Command center → 4 Surge response |
+| `templates/reasoning.html`, `static/reasoning.js` | AI reasoning page: Nemotron's tool chain step by step, toolbox, conclusion, next steps, past reviews |
+| `templates/command.html`, `surge.html`, `denied.html` | Command center, surge response and the access-denied page (blocked + logged + incident) |
 | `neurogrip/patient_view.py` | Gemini plain-language explanation |
 | `neurogrip/store.py` | MongoDB or in-memory storage |
 | `templates/`, `static/` | Dashboard UI. `static/hand.js` is the animated robotic hand |
@@ -228,8 +233,8 @@ Full wiring and test steps are in [`firmware/README.md`](../firmware/README.md).
 2. Pick **Parkinson's**: show the tremor reading and run the finger-tap test.
 3. Pick **Cognitive**: run the reaction test.
 4. **Run AI agent:** show the tool-call trace and the difficulty change it makes. (NVIDIA)
-5. **People icon → Regional surge:** 1,200 patients scored instantly; show the waitlist and the hardest-hit district, then **Coordination brief**. (State Farm + NVIDIA)
-6. **Shield icon → Command center:** the tremor and capacity-gap incidents are already there. Acknowledge one, type a message (it appears live in a second therapist tab), resolve it. Open **Audit log**. (Winstead)
+5. **System 4 · Surge response:** 1,200 patients scored instantly; show the waitlist and the hardest-hit district, then **Write the plan**. (State Farm + NVIDIA)
+6. **System 3 · Command center:** the Detectors board lights up the firing rules; the tremor and capacity-gap incidents are already there. Acknowledge one, type a message (it appears live in a second therapist tab), resolve it. Open **Audit log**. (Winstead)
 7. Log in as patient and try a therapist action (or a wrong password 3 times): a security incident appears live on the therapist's screen. (Winstead)
 8. Log in as patient and click **Explain my progress**. (Gemini)
 9. **Backup:** if the hardware dies, restart with `NG_MODE=camera`. If the camera dies too, use `NG_MODE=mock`.

@@ -1,0 +1,28 @@
+{# One header across every page: the four NeuroGrip systems, in the order a case flows through them. #}
+{% set SYSTEMS = [
+  ('session', '/', '1', 'Live session', 'Rehab · Overall'),
+  ('reasoning', '/reasoning', '2', 'AI reasoning', 'NVIDIA Nemotron'),
+  ('command', '/command', '3', 'Command center', 'Winstead PC'),
+  ('surge', '/surge', '4', 'Surge response', 'State Farm'),
+] %}
+<header class="sysbar">
+  <a class="brand" href="/" aria-label="NeuroGrip home"><span class="logo" aria-hidden="true"></span><b>NeuroGrip</b></a>
+  <nav class="systems" aria-label="Systems">
+    {% for key, href, num, name, track in SYSTEMS %}
+    {% if not loop.first %}<svg class="sys-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>{% endif %}
+    <a href="{{ href }}" class="sys{% if page == key %} on{% endif %}{% if role != 'therapist' and key != 'session' %} locked{% endif %}"
+       {% if page == key %}aria-current="page"{% endif %}
+       title="{% if role != 'therapist' and key != 'session' %}Therapist only{% else %}{{ name }} · {{ track }}{% endif %}">
+      <span class="sys-num">{{ num }}</span>
+      <span class="sys-txt"><b>{{ name }}</b><small>{{ track }}</small></span>
+      {% if key == 'command' and role == 'therapist' %}<span id="inc-badge" class="badge" hidden></span>{% endif %}
+      {% if role != 'therapist' and key != 'session' %}<svg class="lock" aria-hidden="true"><use href="#i-lock"/></svg>{% endif %}
+    </a>
+    {% endfor %}
+  </nav>
+  <div class="sys-right">
+    <a class="mind-link" href="/mind" title="Full-screen headband check: live intent, signal trace, calibration">Mind control</a>
+    <span class="status"><span id="conn-dot" class="dot"></span><span class="who">{{ role|capitalize }}</span></span>
+    <a class="icon-btn" href="/logout" aria-label="Sign out" title="Sign out ({{ role }})"><svg><use href="#i-exit"/></svg></a>
+  </div>
+</header>

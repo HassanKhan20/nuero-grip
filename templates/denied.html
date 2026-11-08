@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Access denied · NeuroGrip{% endblock %}
+{% block content %}
+<section class="panel denied">
+  <svg class="denied-icon" aria-hidden="true"><use href="#i-lock"/></svg>
+  <h1>Access denied</h1>
+  <p class="lead">The <b>{{ role }}</b> account can’t open <code>{{ page }}</code>. It needs the therapist role.</p>
+  <p class="sub">This attempt was blocked, written to the audit log and raised as a security incident for the response team.</p>
+  <a class="btn primary" href="/">Back to your session</a>
+</section>
+{% endblock %}

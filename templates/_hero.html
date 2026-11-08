@@ -1,0 +1,10 @@
+{% macro hero(num, track, title, lead, flow) %}
+<header class="hero">
+  <p class="eyebrow">System {{ num }} of 4 · {{ track }} track</p>
+  <h1>{{ title }}</h1>
+  <p class="lead">{{ lead }}</p>
+  <ol class="flow" aria-label="How this system works">
+    {% for head, body in flow %}<li><b>{{ head }}</b><span>{{ body }}</span></li>{% endfor %}
+  </ol>
+</header>
+{% endmacro %}

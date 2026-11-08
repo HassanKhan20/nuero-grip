@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "_hero.html" import hero %}
+{% block title %}Command center · NeuroGrip{% endblock %}
+{% block hero %}{{ hero('3', 'Winstead PC', 'Incident command center',
+  'Every detector feeds one secure board. Each incident has a scope, an owner and a live timeline; the team talks on the incident itself, and every action, sign-in and blocked request lands in the audit log.',
+  [('Detect', '10 rules run every second'), ('Scope', 'patient, device, network or account'), ('Own', 'acknowledge and assign'),
+   ('Communicate', 'live messages on the incident'), ('Audit', 'every action recorded')]) }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="row-between">
+    <div id="cc-kpis" class="kpis grow"></div>
+    <button type="button" class="btn ghost no-print" data-print="incident log">Export PDF</button>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="row-between"><h2>Detectors</h2><span class="sub">Lit when a rule has an active incident</span></div>
+  <ul id="cc-detectors" class="detectors"></ul>
+</section>
+
+<section class="panel">
+  <div class="row-between no-print">
+    <div class="seg" id="cc-tabs"><button type="button" data-cc="incidents" class="on">Incidents</button><button type="button" data-cc="audit">Audit log</button></div>
+    <div class="seg" id="cc-filter"><button type="button" data-status="active" class="on">Active</button><button type="button" data-status="resolved">Resolved</button><button type="button" data-status="all">All</button></div>
+  </div>
+  <div id="cc-incidents" class="cc-grid">
+    <div class="cc-left">
+      <button type="button" id="cc-declare-btn" class="btn ghost no-print">Declare incident</button>
+      <form id="cc-declare" class="cc-form no-print" hidden>
+        <input name="title" placeholder="What happened?" maxlength="120" required>
+        <div class="btn-row">
+          <select name="severity"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option><option value="critical">Critical</option></select>
+          <select name="category"><option value="clinical">Clinical</option><option value="device">Device</option><option value="security">Security</option><option value="caseload">Caseload</option></select>
+        </div>
+        <textarea name="detail" rows="2" placeholder="Details (optional)" maxlength="500"></textarea>
+        <div class="btn-row"><button type="submit" class="btn primary">Open incident</button><button type="button" id="cc-declare-cancel" class="btn link">Cancel</button></div>
+      </form>
+      <ul id="cc-list" class="cc-list"></ul>
+    </div>
+    <section id="cc-detail" class="cc-detail"><p class="sub">Select an incident.</p></section>
+  </div>
+  <div id="cc-audit" hidden>
+    <div class="table-scroll"><table id="cc-audit-table" class="triage">
+      <thead><tr><th>Time</th><th>Who</th><th>Action</th><th>Detail</th><th>Address</th></tr></thead><tbody></tbody>
+    </table></div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('static', filename='command-page.js') }}"></script>{% endblock %}

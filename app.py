@@ -64,6 +64,7 @@ def create_app(engine, start: bool = True):
     app.extensions["ng"] = {"incidents": incidents, "audit": audit, "detector": detector}
     failed: dict[str, deque] = defaultdict(deque)
     population: dict = {}
+    agent_runs: list[dict] = []  # newest first; shown on the AI reasoning page
 
     def actor() -> str:
         return session.get("role") or "anonymous"
@@ -102,6 +103,8 @@ def create_app(engine, start: bool = True):
                     {"account": actor(), "endpoint": request.path},
                     f"The '{actor()}' account called {request.method} {request.path}, which needs the therapist "
                     "role. Request blocked and logged.")
+                if not request.path.startswith("/api/"):
+                    return render_template("denied.html", role=actor(), page=request.path), 403
                 return jsonify(error="therapist access only"), 403
             return fn(*a, **kw)
         return wrapper
@@ -146,7 +149,28 @@ def create_app(engine, start: bool = True):
     @app.route("/")
     @login_required
     def dashboard():
-        return render_template("dashboard.html", role=session["role"], modes=MODES)
+        return render_template("dashboard.html", role=session["role"], modes=MODES, page="session")
+
+    @app.route("/mind")
+    @login_required
+    def mind_page():  # full-screen "Mind Control Check" for the headband (self-contained page)
+        return app.send_static_file("mind.html")
+
+    # one full page per system: AI reasoning (NVIDIA), command center (Winstead), surge response (State Farm)
+    @app.route("/reasoning")
+    @therapist_only
+    def reasoning_page():
+        return render_template("reasoning.html", role=session["role"], page="reasoning")
+
+    @app.route("/command")
+    @therapist_only
+    def command_page():
+        return render_template("command.html", role=session["role"], page="command")
+
+    @app.route("/surge")
+    @therapist_only
+    def surge_page():
+        return render_template("surge.html", role=session["role"], page="surge")
 
     @app.get("/api/state")
     @login_required
@@ -248,12 +272,24 @@ def create_app(engine, start: bool = True):
         if client is None:
             return no_ai_error()
         audit.record(actor(), "agent_review", "Nemotron session review started", ip())
+        s = engine.state()
+        context = {k: s.get(k) for k in ("mode", "patient_id", "difficulty", "session_s", "source_kind")}
+        started = time.time()
         try:
             result = run_agent(client, nemotron_model(), ToolBox(engine, incidents))
         except Exception as e:
             log.exception("agent failed")
             return jsonify(error=f"Nemotron call failed: {e}"), 502
-        return jsonify(result)
+        run = {**result, "id": (agent_runs[0]["id"] + 1) if agent_runs else 1, "at": started, "seconds": round(time.time() - started, 1),
+               "context": context}
+        agent_runs.insert(0, run)
+        del agent_runs[20:]
+        return jsonify(run)
+
+    @app.get("/api/agent/runs")
+    @therapist_only
+    def api_agent_runs():
+        return jsonify(runs=agent_runs)
 
     @app.get("/api/triage")
     @therapist_only
