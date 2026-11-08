@@ -277,17 +277,30 @@ def create_app(engine, start: bool = True):
     @therapist_only
     def api_agent():
         client = ai_client()
+        end = bool((request.get_json(silent=True) or {}).get("end_session"))
         if client is None:
+            if end:  # no AI: still save the finished session
+                try:
+                    engine.end_session()
+                except Exception:
+                    log.exception("saving session failed")
             return no_ai_error()
         audit.record(actor(), "agent_review", "Nemotron session review started", ip())
         s = engine.state()
         context = {k: s.get(k) for k in ("mode", "patient_id", "difficulty", "session_s", "source_kind")}
         started = time.time()
+        # End session: review the session just finished, THEN save it and start a fresh one
         try:
             result = run_agent(client, nemotron_model(), ToolBox(engine, incidents))
         except Exception as e:
             log.exception("agent failed")
             return jsonify(error=f"Nemotron call failed: {e}"), 502
+        finally:
+            if end:
+                try:
+                    engine.end_session()
+                except Exception:
+                    log.exception("saving session failed")
         run = {**result, "id": (agent_runs[0]["id"] + 1) if agent_runs else 1, "at": started, "seconds": round(time.time() - started, 1),
                "context": context}
         agent_runs.insert(0, run)

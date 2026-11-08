@@ -92,7 +92,7 @@ function status(text) {
   $("rs-status").textContent = text || "";
 }
 
-async function run() {
+async function run(endSession = false) {
   const btn = $("btn-run");
   btn.disabled = true;
   const t0 = Date.now();
@@ -100,7 +100,7 @@ async function run() {
   tick();
   const timer = setInterval(tick, 1000);
   try {
-    const r = await api("/api/agent");
+    const r = await api("/api/agent", "POST", endSession ? { end_session: true } : undefined);
     runs.unshift(r);
     status("");
     show(r);
@@ -112,14 +112,15 @@ async function run() {
   }
 }
 
-$("btn-run").onclick = run;
+$("btn-run").onclick = () => run();
 $("rs-history").onchange = (e) => { const r = runs.find((x) => String(x.id) === e.target.value); if (r) show(r); };
 api("/api/agent/runs", "GET").then((r) => {
   runs = r.runs;
   if (runs.length) show(runs[0]);
 }).catch(() => {}).finally(() => {
-  if (new URLSearchParams(location.search).get("run") === "1") {
+  const want = new URLSearchParams(location.search).get("run");
+  if (want) {
     history.replaceState(null, "", location.pathname); // a refresh shouldn't start another review
-    run();
+    run(want === "end");
   }
 });

@@ -94,3 +94,42 @@ def test_session_page_has_zero_button_wired_to_the_endpoint(made):
     assert b'id="btn-zero"' in c.get("/").data
     assert c.post("/api/intent/zero").get_json()["ok"] is True
     assert app.extensions["ng"]["audit"].list()[0]["action"] == "intent_zero"
+
+
+def test_end_session_review_covers_the_session_just_finished(monkeypatch):
+    """End session -> AI reasoning must review the reps just done, then save and reset (not review an empty session)."""
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    store = MemoryStore()
+    eng = Engine(MockSource(), MockVision(), store)
+    app, _ = create_app(eng, start=False)
+    app.config["TESTING"] = True
+    c = app.test_client()
+    _login(c, "therapist")
+    eng.metrics.reps = 4
+    seen = {}
+
+    def fake_agent(client, model, tools):
+        seen["reps"] = eng.metrics.reps
+        return {"summary": "ok", "next_session_plan": "", "trace": []}
+
+    monkeypatch.setattr(app_module, "make_nvidia_client", lambda: object())
+    monkeypatch.setattr(app_module, "run_agent", fake_agent)
+    r = c.post("/api/agent", json={"end_session": True})
+    assert r.status_code == 200
+    assert seen["reps"] == 4                      # reviewed the finished session
+    assert eng.metrics.reps == 0                  # then a fresh one started
+    assert store.history("demo")[0]["reps"] == 4  # and the finished one was saved
+
+
+def test_end_session_still_saves_when_the_ai_is_unavailable(monkeypatch):
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    store = MemoryStore()
+    eng = Engine(MockSource(), MockVision(), store)
+    app, _ = create_app(eng, start=False)
+    app.config["TESTING"] = True
+    c = app.test_client()
+    _login(c, "therapist")
+    eng.metrics.reps = 3
+    monkeypatch.setattr(app_module, "make_nvidia_client", lambda: None)
+    assert c.post("/api/agent", json={"end_session": True}).status_code >= 400
+    assert eng.metrics.reps == 0 and store.history("demo")[0]["reps"] == 3

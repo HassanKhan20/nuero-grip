@@ -469,15 +469,8 @@ if (role === "therapist") {
   $("btn-tap").onclick = () => api("/api/tapping", "POST", { seconds: 10 }).catch(fail);
 
   // the review itself runs on the AI reasoning page (/reasoning); ending a session saves it and goes there
-  $("btn-end").onclick = async () => {
-    try {
-      await api("/api/session/end");
-    } catch (err) {
-      toast(err.message);
-      return;
-    }
-    location.href = "/reasoning?run=1";
-  };
+  // the review runs on the session as it stands, and the server saves + resets it afterwards
+  $("btn-end").onclick = () => { location.href = "/reasoning?run=end"; };
 } else {
   $("btn-explain").onclick = () => busy($("btn-explain"), "explain-status", async () => {
     const r = await api("/api/patient_view");
