@@ -66,7 +66,7 @@ body.app { height: 100vh; overflow: hidden; }
 .icon-btn:hover, .icon-btn.on { color: var(--blue); background: var(--blue-soft); }
 .badge { position: absolute; top: 3px; right: 3px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--warn); color: #fff; font-size: .68rem; font-weight: 700; display: grid; place-items: center; }
 
-.page { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; padding: 12px 24px 16px; min-height: 0; width: 100%; max-width: 1480px; margin: 0 auto; }
+.page { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; padding: 12px 24px 16px; min-height: 0; width: 100%; max-width: 1480px; margin: 0 auto; }
 
 /* ---------- stage: annotated 3D hand ---------- */
 .stage { position: relative; min-height: 0; border-radius: 20px; overflow: hidden; border: 1px solid var(--line);
@@ -120,8 +120,12 @@ body.app { height: 100vh; overflow: hidden; }
 .pill.bad { background: rgb(194 78 66 / .1); color: var(--bad); border-color: rgb(194 78 66 / .35); }
 @keyframes shimmer { from { background-position: 125% 0; } to { background-position: -125% 0; } }
 
-/* ---------- under the stage: controls + spec strip ---------- */
-.under { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 28px; padding: 0 4px; }
+/* ---------- bottom: spec strip + two cards on the left, the camera / test card fills the right ---------- */
+.bottom { display: grid; grid-template-columns: 1.05fr 1.25fr 1.2fr; grid-template-areas: "under under side" "intent review side"; gap: 12px; }
+.bottom > .card-intent { grid-area: intent; }
+.bottom > .card-review { grid-area: review; }
+.bottom > #cam-card, .bottom > #test-tap, .bottom > #test-reaction { grid-area: side; }
+.under { grid-area: under; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 24px; padding: 0 4px; }
 .control-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .seg { display: flex; gap: 2px; padding: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
 .seg button { font: inherit; font-size: .84rem; font-weight: 500; background: none; border: 0; color: var(--muted); padding: .32rem .75rem; border-radius: 7px; cursor: pointer; }
@@ -133,7 +137,6 @@ body.app { height: 100vh; overflow: hidden; }
 .spec-item b { font-family: var(--display); font-size: 1.45rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ---------- cards ---------- */
-.cards { display: grid; grid-template-columns: 1.1fr 1.3fr 1fr; gap: 12px; align-items: stretch; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 8px; align-content: start; box-shadow: var(--shadow); min-width: 0; backdrop-filter: blur(16px); }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .card-head .num { font-family: var(--display); font-size: 1.3rem; font-weight: 600; color: var(--blue); }
@@ -155,9 +158,9 @@ body.app { height: 100vh; overflow: hidden; }
 .preview { margin: 0; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   padding: 8px 10px; background: rgb(181 155 217 / .1); border: 1px solid rgb(181 155 217 / .3); border-radius: var(--radius-sm); }
 .cam-card { grid-template-rows: auto minmax(0, 1fr); }
-.cam-box { position: relative; min-height: 96px; height: 100%; border-radius: var(--radius-sm); overflow: hidden; background: var(--panel-2); border: 1px solid var(--line); display: grid; place-items: center; }
+.cam-box { position: relative; min-height: 120px; height: 100%; border-radius: var(--radius-sm); overflow: hidden; background: var(--panel-2); border: 1px solid var(--line); display: grid; place-items: center; }
 .cam-box { cursor: pointer; background: #10141f; }
-.cam-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.cam-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .cam-box .cam-msg { color: #a9b0c2; }
 
 /* large camera view inside the stage (between the finger callouts) */
@@ -340,10 +343,10 @@ body.app { height: 100vh; overflow: hidden; }
   .leaders { display: none; }
   .callouts { position: static; width: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); padding: 0 12px; }
   .view-bar { bottom: auto; top: calc(52vh - 50px); }
+  .bottom { grid-template-columns: 1fr; grid-template-areas: "under" "intent" "review" "side"; }
   .under { grid-template-columns: 1fr; gap: 12px; }
   .spec { flex-wrap: wrap; row-gap: 10px; }
   .spec-item { flex: 1 1 40%; }
-  .cards { grid-template-columns: 1fr; }
 }
 
 /* Export PDF: print only the open sheet */
