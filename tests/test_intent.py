@@ -102,3 +102,14 @@ def test_calibrate_from_rejects_no_change():
     from neurogrip.intent import calibrate_from
     with pytest.raises(ValueError, match="forearm"):
         calibrate_from([(70, 70)] * 50, [(50, 70)] * 50)
+
+
+def test_realtime_mock_accel_is_uniformly_sampled():
+    # the engine loop may run fast or jittery; the simulated wristband must still look like a steady 50 Hz sensor
+    import math
+    import numpy as np
+    from neurogrip.signals import tremor_frequency
+    src = MockSource(tremor_hz=5, realtime=True)
+    frames = [src.read() for _ in range(256)]  # read as fast as possible: wall time barely moves
+    mag = np.array([math.sqrt(f.ax ** 2 + f.ay ** 2 + f.az ** 2) for f in frames])
+    assert abs(tremor_frequency(mag) - 5) < 0.4

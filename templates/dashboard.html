@@ -115,16 +115,12 @@
       {% if role == 'therapist' %}
       <article class="panel">
         <header class="panel-head"><h2>Session review</h2><span class="tag">Nemotron</span></header>
-        <p id="agent-status" class="sub"></p>
-        <div id="agent-out" hidden>
-          <p id="agent-summary" class="summary"></p>
-          <p class="label">Next session</p>
-          <p id="agent-plan" class="plan"></p>
-          <details class="more"><summary id="trace-summary">Agent steps</summary><ol id="agent-trace" class="trace"></ol></details>
-        </div>
+        <p id="agent-status" class="sub">Reviews the session, sets the next difficulty and writes a report.</p>
+        <p id="agent-preview" class="preview" hidden></p>
         <div class="btn-row">
           <button type="button" id="btn-agent" class="btn primary">Review session</button>
           <button type="button" id="btn-end" class="btn ghost">End session</button>
+          <button type="button" id="btn-report" class="btn link" hidden>Open report</button>
         </div>
       </article>
       {% else %}
@@ -184,8 +180,30 @@
 </dialog>
 
 {% if role == 'therapist' %}
+<dialog id="sheet-report" class="sheet wide report">
+  <div class="report-actions no-print">
+    <button type="button" class="btn primary" data-print="session report">Export PDF</button>
+    <button type="button" class="close" aria-label="Close">×</button>
+  </div>
+  <article class="report-doc">
+    <header class="report-head">
+      <div class="report-brand"><span class="mark" aria-hidden="true"></span>NeuroGrip</div>
+      <h1>Session report</h1>
+      <p id="rep-meta" class="sub"></p>
+    </header>
+    <section class="rep-metrics" id="rep-metrics"></section>
+    <section class="rep-block"><h2>Summary</h2><p id="rep-summary"></p></section>
+    <section class="rep-block rep-plan"><h2>Next session</h2><p id="rep-plan"></p></section>
+    <section class="rep-block"><h2>What the agent did</h2><ol id="rep-steps" class="rep-steps"></ol></section>
+    <footer class="rep-foot">Generated with NVIDIA Nemotron. Decision support only: reviewed by the treating therapist.</footer>
+  </article>
+</dialog>
+
 <dialog id="sheet-caseload" class="sheet wide">
-  <header class="panel-head"><h2>Caseload</h2><button type="button" class="close" aria-label="Close">×</button></header>
+  <header class="panel-head"><h2>Caseload</h2>
+    <div class="btn-row no-print"><button type="button" id="btn-caseload-pdf" class="btn ghost" data-print="caseload" hidden>Export PDF</button><button type="button" class="close" aria-label="Close">×</button></div>
+  </header>
+  <p id="caseload-meta" class="sub print-only"></p>
   <p id="triage-status" class="sub"></p>
   <div class="table-scroll">
     <table id="triage-table" class="triage" hidden>
@@ -193,7 +211,7 @@
       <tbody></tbody>
     </table>
   </div>
-  <button type="button" id="btn-triage" class="btn primary">Rank patients</button>
+  <button type="button" id="btn-triage" class="btn primary no-print">Rank patients</button>
 </dialog>
 {% endif %}
 

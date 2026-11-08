@@ -35,6 +35,7 @@ class MockSource:
         self.realtime = realtime
         self._t0 = time.monotonic()
         self._drop = 0.0
+        self._n = 0  # sample counter: the simulated wristband samples at exactly 50 Hz
         self.ms = 0
         self.sent: list[str] = []
 
@@ -49,7 +50,8 @@ class MockSource:
         base = round(400 * (1 - self._drop))
         temple = base + self.rng.randint(-3, 3)
         forearm = base + self.rng.randint(-3, 3)
-        t = self.ms / 1000
+        self._n += 1
+        t = self._n * FRAME_MS / 1000  # uniform sample clock, independent of loop jitter
         az = 1000 + 60 * math.sin(2 * math.pi * self.tremor_hz * t) if self.tremor_hz else 1000
         return SensorFrame(self.ms, temple, forearm,
                            self.rng.randint(-3, 3), self.rng.randint(-3, 3),

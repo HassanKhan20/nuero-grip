@@ -320,7 +320,9 @@ function renderOverlays(s) {
 
 // ---------- main render ----------
 let tourChecked = false;
+let lastState = null;
 function render(s) {
+  lastState = s;
   window.dispatchEvent(new CustomEvent("ng-state", { detail: s }));
   if (!tourChecked) { tourChecked = true; tour.startIfNew(); }
   if (s.mode !== currentMode) { currentMode = s.mode; applyCondition(s.mode); }
@@ -404,28 +406,109 @@ if (role === "therapist") {
   $("btn-cue").onclick = () => api("/api/latency").catch(fail);
   $("btn-tap").onclick = () => api("/api/tapping", "POST", { seconds: 10 }).catch(fail);
 
-  const review = () => busy($("btn-agent"), "agent-status", async () => {
-    const r = await api("/api/agent");
-    $("agent-out").hidden = false;
-    setText("agent-summary", r.summary || "No summary returned.");
-    setText("agent-plan", r.next_session_plan || "—");
-    setText("trace-summary", `Agent steps (${r.trace.length})`);
-    $("agent-trace").replaceChildren(...r.trace.map((t) => {
+  // ----- session report: readable agent steps + export to PDF -----
+  const ACTIONS = {
+    get_session_metrics: (a, r) => ["Read this session",
+      `${r.reps ?? 0} reps · ${Math.round(r.activation_rate ?? 0)}% activation · ${fmtClock((r.session_s || 0) * 1000)} long`],
+    get_patient_history: (a, r) => ["Compared with past sessions",
+      Array.isArray(r) ? (r.length ? `${r.length} previous session${r.length > 1 ? "s" : ""} on record` : "No previous sessions on record") : ""],
+    set_difficulty: (a, r, ctx) => {
+      const to = r.level ?? a.level;
+      const from = ctx.before;
+      const title = from == null || from === to ? `Kept difficulty at ${to}`
+        : `${to < from ? "Lowered" : "Raised"} difficulty from ${from} to ${to}`;
+      return [title, a.reason || r.reason || ""];
+    },
+    trigger_feedback: (a) => [a.kind === "celebrate" ? "Sent a celebration cue" : "Sent an alert to the dashboard", a.message || ""],
+  };
+  let lastReport = null;
+
+  function buildReport(r, snap, startedAt) {
+    const ctx = { before: snap?.difficulty ?? null };
+    const metricsStep = r.trace.find((t) => t.tool === "get_session_metrics" && !t.result?.error);
+    if (metricsStep?.result?.difficulty != null) ctx.before = metricsStep.result.difficulty;
+    const steps = r.trace.map((t) => {
+      const fn = ACTIONS[t.tool];
+      const [title, detail] = t.result?.error ? [`${t.tool} failed`, t.result.error]
+        : fn ? fn(t.args || {}, t.result || {}, ctx) : [t.tool, ""];
+      return { title, detail, reasoning: t.reasoning || "" };
+    });
+    const setStep = [...r.trace].reverse().find((t) => t.tool === "set_difficulty" && !t.result?.error);
+    const after = setStep ? (setStep.result.level ?? setStep.args.level) : ctx.before;
+    // show the numbers the agent actually analyzed, not the screen at click time
+    const analyzed = metricsStep ? { ...(snap || {}), ...metricsStep.result } : (snap || {});
+    return { r, snap: analyzed, steps, before: ctx.before, after, at: startedAt };
+  }
+
+  function renderReport(rep) {
+    const s = rep.snap;
+    const cond = CONDITIONS[s.mode] || CONDITIONS.stroke;
+    const when = rep.at.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    setText("rep-meta", `Patient ${s.patient_id || "demo"} · ${cond.title} · ${when} · ${fmtClock((s.session_s || 0) * 1000)} session`);
+    const cards = cond.stats.filter((k) => k !== "difficulty").map((k) => [STATS[k][0], STATS[k][2](s)]);
+    cards.push(["Difficulty", rep.before != null && rep.after !== rep.before ? `${rep.before} → ${rep.after}` : `${rep.after ?? "—"}`]);
+    $("rep-metrics").replaceChildren(...cards.map(([label, value]) => {
+      const d = document.createElement("div");
+      d.innerHTML = "<span></span><b></b>";
+      d.querySelector("span").textContent = label;
+      d.querySelector("b").textContent = value;
+      return d;
+    }));
+    setText("rep-summary", rep.r.summary || "No summary returned.");
+    setText("rep-plan", rep.r.next_session_plan || "—");
+    $("rep-steps").replaceChildren(...rep.steps.map((st) => {
       const li = document.createElement("li");
-      if (t.reasoning) {
-        const why = document.createElement("p");
-        why.className = "why";
-        why.textContent = t.reasoning;
-        li.append(why);
+      const title = document.createElement("b");
+      title.textContent = st.title;
+      li.append(title);
+      if (st.detail) {
+        const p = document.createElement("p");
+        p.textContent = st.detail;
+        li.append(p);
       }
-      const head = document.createElement("code");
-      head.textContent = `${t.tool}(${Object.keys(t.args).length ? JSON.stringify(t.args) : ""})`;
-      const pre = document.createElement("pre");
-      pre.textContent = JSON.stringify(t.result, null, 1).slice(0, 600);
-      li.append(head, pre);
+      if (st.reasoning) {
+        const det = document.createElement("details");
+        det.className = "no-print";
+        det.innerHTML = "<summary>Agent reasoning</summary><p></p>";
+        det.querySelector("p").textContent = st.reasoning;
+        li.append(det);
+      }
       return li;
     }));
-  });
+    if (!rep.steps.length) $("rep-steps").innerHTML = "<li><b>Answered without using tools</b></li>";
+  }
+
+  const review = async () => {
+    const btn = $("btn-agent");
+    btn.disabled = true;
+    setText("agent-status", "Nemotron is reviewing the session… about 15 s");
+    const snap = lastState;
+    const startedAt = new Date();
+    try {
+      const r = await api("/api/agent");
+      lastReport = buildReport(r, snap, startedAt);
+      renderReport(lastReport);
+      setText("agent-status", `Reviewed ${startedAt.toLocaleTimeString([], { timeStyle: "short" })}`);
+      $("agent-preview").textContent = r.summary || "";
+      $("agent-preview").hidden = !r.summary;
+      $("btn-report").hidden = false;
+      openSheet("sheet-report");
+    } catch (err) {
+      setText("agent-status", err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+  $("btn-report").onclick = () => { if (lastReport) openSheet("sheet-report"); };
+
+  // Export PDF: print just the open sheet; the browser's "Save as PDF" names the file from the title
+  document.querySelectorAll("[data-print]").forEach((b) => b.addEventListener("click", () => {
+    const original = document.title;
+    document.title = `NeuroGrip ${b.dataset.print} ${new Date().toISOString().slice(0, 10)}`;
+    window.addEventListener("afterprint", () => { document.title = original; }, { once: true });
+    window.print();
+  }));
+
   $("btn-agent").onclick = review;
   $("btn-end").onclick = async () => {
     try {
@@ -455,6 +538,8 @@ if (role === "therapist") {
       return tr;
     }));
     $("triage-table").hidden = false;
+    setText("caseload-meta", `Ranked ${new Date().toLocaleString([], { dateStyle: "medium", timeStyle: "short" })} by NVIDIA Nemotron`);
+    $("btn-caseload-pdf").hidden = false;
   });
 } else {
   $("btn-explain").onclick = () => busy($("btn-explain"), "explain-status", async () => {
