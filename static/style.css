@@ -43,8 +43,11 @@ code, kbd { font: .8em ui-monospace, Consolas, monospace; background: var(--pane
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
-/* ---------- page frame: one screen, no scrolling ---------- */
-body.app { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; overflow: hidden; }
+/* ---------- page frame: one screen, no scrolling ----------
+   The grid lives on .app-shell, not <body>, so elements that browser extensions inject into <body>
+   can't take a grid row and push the layout around. */
+body.app { height: 100vh; overflow: hidden; }
+.app-shell { position: fixed; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 10px 24px; background: rgb(255 255 255 / .5); border-bottom: 1px solid var(--line); backdrop-filter: blur(16px); }
 .nav-left b { font-family: var(--display); letter-spacing: -.01em; }
 .nav-left { display: flex; align-items: center; gap: 10px; font-size: 1rem; }
@@ -318,7 +321,8 @@ body.app { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh
 
 /* narrow screens: stack (scrolling allowed here) */
 @media (max-width: 1100px) {
-  body.app { display: block; height: auto; overflow: visible; }
+  body.app { height: auto; overflow: visible; }
+  .app-shell { position: static; display: block; height: auto; }
   .nav { grid-template-columns: 1fr auto; }
   .tabs { grid-column: 1 / -1; grid-row: 2; overflow-x: auto; }
   .page { display: flex; flex-direction: column; }
