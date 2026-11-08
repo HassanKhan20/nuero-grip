@@ -1,48 +1,31 @@
 {% extends "base.html" %}
 {% from "_hero.html" import hero %}
 {% block title %}AI reasoning · NeuroGrip{% endblock %}
-{% block hero %}{{ hero('2', 'NVIDIA', 'AI reasoning and next steps',
-  'Nemotron runs a multi-step tool workflow on the live session. It reads the data, compares it with past sessions, checks the live detections, takes action, and explains every step before it writes the plan.',
-  [('Read', 'this session’s metrics'), ('Compare', 'with the patient’s history'), ('Check', 'open incidents from the detectors'),
-   ('Act', 'set difficulty, cue the patient, escalate'), ('Plan', 'summary and next steps')]) }}{% endblock %}
+{% block hero %}{{ hero('NVIDIA', 'AI reasoning',
+  'Nemotron reviews the session, makes changes on its own, and plans the next session.') }}{% endblock %}
 {% block content %}
-<div class="doc-grid">
-  <section class="panel">
-    <div class="row-between">
-      <div><h2>Session review</h2><p id="rs-status" class="sub">No review yet. Run one on the live session.</p></div>
-      <div class="btn-row no-print">
-        <button type="button" class="btn ghost" data-print="AI session review">Export PDF</button>
-        <button type="button" id="btn-run" class="btn primary">Run review</button>
-      </div>
+<section class="panel">
+  <div class="row-between">
+    <h2>Session review</h2>
+    <div class="btn-row">
+      <select id="rs-history" aria-label="Past reviews" hidden></select>
+      <button type="button" id="btn-run" class="btn primary">Run review</button>
     </div>
-    <div id="rs-empty" class="empty-state">
-      <p><b>Nemotron hasn’t reviewed a session yet.</b></p>
-      <p class="sub">Press <b>Run review</b>, or end a session on the Live session page. Each tool call and the reason behind it will appear here as a chain.</p>
-    </div>
-    <div id="rs-view" hidden>
-      <p id="rs-meta" class="sub"></p>
-      <div id="rs-kpis" class="kpis"></div>
-      <h3 class="section-h">Reasoning chain</h3>
-      <ol id="rs-steps" class="chain"></ol>
-      <div class="conclusion">
-        <section><h3 class="section-h">Conclusion</h3><p id="rs-summary"></p></section>
-        <section class="next"><h3 class="section-h">Next steps</h3><ul id="rs-next" class="next-list"></ul></section>
-      </div>
-      <p class="hint">Decision support only. The treating therapist reviews every recommendation.</p>
-    </div>
-  </section>
+  </div>
+  <p id="rs-status" class="status-line" hidden></p>
 
-  <aside class="doc-side">
-    <section class="panel">
-      <h2>Toolbox</h2>
-      <p class="sub">The 6 tools Nemotron can call. The ones it used in this review are lit.</p>
-      <ul id="rs-tools" class="tools"></ul>
-    </section>
-    <section class="panel">
-      <h2>Past reviews</h2>
-      <ul id="rs-history" class="history"><li class="empty">None yet</li></ul>
-    </section>
-  </aside>
-</div>
+  <p id="rs-empty" class="empty-state">No review yet. Press <b>Run review</b>.</p>
+
+  <div id="rs-view" hidden>
+    <h3>Summary</h3>
+    <p id="rs-summary"></p>
+
+    <h3>Next steps</h3>
+    <ul id="rs-next" class="next-list"></ul>
+
+    <h3 id="rs-steps-h">What Nemotron did</h3>
+    <ol id="rs-steps" class="chain"></ol>
+  </div>
+</section>
 {% endblock %}
 {% block scripts %}<script type="module" src="{{ url_for('static', filename='reasoning.js') }}"></script>{% endblock %}

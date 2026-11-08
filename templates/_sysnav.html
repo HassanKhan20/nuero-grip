@@ -6,7 +6,7 @@
   ('surge', '/surge', '4', 'Surge response', 'State Farm'),
 ] %}
 <header class="sysbar">
-  <a class="brand" href="/" aria-label="NeuroGrip home"><span class="logo" aria-hidden="true"></span><b>NeuroGrip</b></a>
+  <a class="brand" href="/" aria-label="NeuroGrip home" title="NeuroGrip"><span class="logo" aria-hidden="true"></span><b>NeuroGrip</b></a>
   <nav class="systems" aria-label="Systems">
     {% for key, href, num, name, track in SYSTEMS %}
     {% if not loop.first %}<svg class="sys-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>{% endif %}
@@ -14,7 +14,7 @@
        {% if page == key %}aria-current="page"{% endif %}
        title="{% if role != 'therapist' and key != 'session' %}Therapist only{% else %}{{ name }} · {{ track }}{% endif %}">
       <span class="sys-num">{{ num }}</span>
-      <span class="sys-txt"><b>{{ name }}</b><small>{{ track }}</small></span>
+      <span class="sys-txt"><b>{{ name }}</b></span>
       {% if key == 'command' and role == 'therapist' %}<span id="inc-badge" class="badge" hidden></span>{% endif %}
       {% if role != 'therapist' and key != 'session' %}<svg class="lock" aria-hidden="true"><use href="#i-lock"/></svg>{% endif %}
     </a>

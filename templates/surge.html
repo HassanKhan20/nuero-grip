@@ -1,51 +1,45 @@
 {% extends "base.html" %}
 {% from "_hero.html" import hero %}
 {% block title %}Surge response · NeuroGrip{% endblock %}
-{% block hero %}{{ hero('4', 'State Farm', 'Surge response',
-  'A disaster cuts 1,200 rehab patients off from care at once. Every one of them is scored, the most at-risk get a therapist first, nobody without one is dropped, and Nemotron writes the plan for the gap.',
-  [('Score', 'every patient, 0–100 with reasons'), ('Flag', '3+ days without care or declining = urgent'), ('Assign', 'most at-risk first, up to capacity'),
-   ('Catch', 'waitlist plus a capacity-gap incident'), ('Coordinate', 'Nemotron writes the plan')]) }}{% endblock %}
+{% block hero %}{{ hero('State Farm', 'Surge response',
+  'A disaster cuts 1,200 rehab patients off from care. NeuroGrip ranks who needs help first so no one is missed.') }}{% endblock %}
 {% block content %}
-<p id="caseload-meta" class="sub print-only"></p>
-<div class="seg no-print" id="tri-tabs"><button type="button" data-tri="surge" class="on">Regional surge</button><button type="button" data-tri="clinic">My caseload</button></div>
+<div class="seg" id="tri-tabs"><button type="button" data-tri="surge" class="on">Disaster surge</button><button type="button" data-tri="clinic">My clinic</button></div>
 
 <div id="tri-surge" class="tri-pane">
-  <section class="panel"><div id="surge-kpis" class="kpis"></div></section>
-  <div class="surge-cols">
-    <section class="panel"><h2>Urgent patients by region</h2><div id="surge-regions" class="bars"></div></section>
-    <section class="panel"><h2>Therapist load</h2><div id="surge-load" class="bars"></div></section>
-  </div>
-  <section class="panel brief-panel">
-    <div class="row-between">
-      <div><h2>Coordination plan</h2><p class="sub">NVIDIA Nemotron reads the totals and the most at-risk patients and plans how to cover the gap.</p></div>
-      <div class="btn-row no-print"><span id="surge-status" class="sub"></span><button type="button" id="btn-brief" class="btn primary">Write the plan</button></div>
-    </div>
-    <div id="surge-brief-box" class="brief" hidden><p id="surge-brief"></p></div>
-  </section>
+  <section class="panel"><div id="surge-kpis" class="stats"></div></section>
+
   <section class="panel">
     <div class="row-between">
-      <h2>Patients, most at-risk first</h2>
-      <div class="btn-row no-print">
-        <div class="seg" id="surge-filter"><button type="button" data-urg="urgent" class="on">Urgent</button><button type="button" data-urg="monitor">Monitor</button><button type="button" data-urg="stable">Stable</button><button type="button" data-urg="">All</button></div>
-        <button type="button" class="btn ghost" data-print="surge triage">Export PDF</button>
-      </div>
+      <h2>Plan to cover the gap</h2>
+      <button type="button" id="btn-brief" class="btn primary">Write plan with Nemotron</button>
+    </div>
+    <p id="surge-status" class="status-line" hidden></p>
+    <p id="surge-brief" class="brief" hidden></p>
+  </section>
+
+  <section class="panel">
+    <div class="row-between">
+      <h2>Who needs help first</h2>
+      <div class="seg" id="surge-filter"><button type="button" data-urg="urgent" class="on">Urgent</button><button type="button" data-urg="monitor">Monitor</button><button type="button" data-urg="stable">Stable</button><button type="button" data-urg="">All</button></div>
     </div>
     <div class="table-scroll"><table id="surge-table" class="triage">
-      <thead><tr><th>Priority</th><th>Risk</th><th>Patient</th><th>Region</th><th>Condition</th><th>Why</th><th>Care</th></tr></thead><tbody></tbody>
+      <thead><tr><th>Priority</th><th>Patient</th><th>Region</th><th>Why</th><th>Care</th></tr></thead><tbody></tbody>
     </table></div>
-    <p id="surge-more" class="sub"></p>
+    <p id="surge-more"></p>
   </section>
 </div>
 
 <div id="tri-clinic" class="tri-pane" hidden>
   <section class="panel">
     <div class="row-between">
-      <div><h2>My caseload</h2><p class="sub">Your 10 clinic patients, ranked by Nemotron with a reason for each.</p></div>
-      <div class="btn-row no-print"><span id="triage-status" class="sub"></span><button type="button" id="btn-triage" class="btn primary">Rank patients with Nemotron</button></div>
+      <h2>My clinic patients</h2>
+      <button type="button" id="btn-triage" class="btn primary">Rank with Nemotron</button>
     </div>
+    <p id="triage-status" class="status-line" hidden></p>
     <div class="table-scroll">
       <table id="triage-table" class="triage" hidden>
-        <thead><tr><th>Priority</th><th>Patient</th><th>Condition</th><th>Trend</th><th>Last seen</th><th>Reason</th></tr></thead>
+        <thead><tr><th>Priority</th><th>Patient</th><th>Condition</th><th>Last seen</th><th>Why</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
