@@ -112,10 +112,15 @@ if (!hand) {
   document.querySelector(".view-bar").hidden = true;
 }
 document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
+  if (b.dataset.view === "camera") { setCamView(true); return; }
+  lastHandView = b.dataset.view;
+  if (camView) setCamView(false);
   hand.setView(b.dataset.view);
   document.querySelectorAll("[data-view]").forEach((x) => x.classList.toggle("on", x === b));
 }));
+$("cam-box").addEventListener("click", () => { if (!$("view-cam").hidden) setCamView(!camView); });
 document.querySelectorAll("[data-rot]").forEach((b) => b.addEventListener("click", () => {
+  if (camView) setCamView(false);
   hand.rotate(Number(b.dataset.rot));
   document.querySelectorAll("[data-view]").forEach((x) => x.classList.remove("on"));
 }));
@@ -205,7 +210,20 @@ function drawLeaders(anchors) {
 
 // ---------- camera mini panel ----------
 let camStarted = false;
+let camView = false;
+function setCamView(on) {
+  camView = on;
+  $("stage").classList.toggle("cam-mode", on);
+  $("stage-cam").hidden = !on;
+  (on ? $("stage-cam") : $("cam-box")).prepend($("cam"));
+  if (!on) setText("cam-msg", "");
+  document.querySelectorAll("[data-view]").forEach((x) => x.classList.toggle("on", on ? x.dataset.view === "camera" : x.dataset.view === lastHandView));
+}
+let lastHandView = "palm";
 function renderCamera(s) {
+  const camAvailable = s.source_kind !== "mock" && s.camera_ok && s.control_mode === "mirror";
+  $("view-cam").hidden = !camAvailable;
+  if (camView && !camAvailable) setCamView(false);
   const img = $("cam");
   let msg = "";
   let tag = "Off";
@@ -222,6 +240,7 @@ function renderCamera(s) {
     }
   }
   img.hidden = !(tag === "Live" && img.complete && img.naturalWidth);
+  if (camView && !msg) msg = "Shown in the main view";
   setText("cam-msg", msg);
   $("cam-msg").hidden = !msg;
   setText("cam-tag", tag);

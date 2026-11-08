@@ -58,6 +58,7 @@
     <div id="watermark" class="watermark" aria-hidden="true">STROKE</div>
     <div id="hand3d" class="scene"></div>
     <svg id="leaders" class="leaders" aria-hidden="true"></svg>
+    <div id="stage-cam" class="stage-cam" hidden></div>
 
     <div class="callouts left">
       {% for key, label, servo in [('pinky', 'Pinky', 5), ('ring', 'Ring', 4), ('middle', 'Middle', 3)] %}
@@ -89,6 +90,7 @@
       <button type="button" data-view="front">Front</button>
       <button type="button" data-view="palm" class="on">3/4</button>
       <button type="button" data-view="side">Side</button>
+      <button type="button" data-view="camera" id="view-cam" hidden>Camera</button>
       <span class="sep"></span>
       <button type="button" class="rot" data-rot="-1" aria-label="Rotate left"><svg><use href="#i-chev-l"/></svg></button>
       <span class="deg">360°</span>
@@ -174,7 +176,7 @@
 
     <article id="cam-card" class="card cam-card">
       <header class="card-head"><h2>Camera</h2><span class="tag" id="cam-tag">Off</span></header>
-      <div class="cam-box">
+      <div class="cam-box" id="cam-box" title="Show large">
         <img id="cam" alt="Camera view of the healthy hand" hidden>
         <p id="cam-msg" class="cam-msg">No camera</p>
       </div>
