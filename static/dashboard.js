@@ -425,6 +425,13 @@ $("btn-tour").addEventListener("click", () => tour.start());
 // ---------- socket ----------
 const socket = io();
 socket.on("connect", () => $("conn-dot").classList.add("live"));
+// a refused connection usually means the login expired: go to the login page instead of hanging on "Connecting"
+socket.on("connect_error", async () => {
+  try {
+    const r = await fetch("/api/state");
+    if (r.status === 401 || r.redirected) location.href = "/login";
+  } catch { /* server down: socket.io keeps retrying */ }
+});
 socket.on("disconnect", () => { $("conn-dot").classList.remove("live"); setText("cond-note", "Reconnecting…"); });
 socket.on("state", render);
 socket.on("event", (e) => {

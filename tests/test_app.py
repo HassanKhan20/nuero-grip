@@ -99,3 +99,15 @@ def test_calibrate_endpoint(client):
     _login(client, "patient")
     assert client.post("/api/calibrate").get_json() == {"ok": True}
     assert client.get("/api/state").get_json()["calibration_phase"] == "relax"
+
+
+def test_secret_key_survives_restarts(tmp_path, monkeypatch):
+    # a restart must not invalidate everyone's login (open tabs would hang on "Connecting")
+    from app import load_secret
+    monkeypatch.delenv("NG_SECRET", raising=False)
+    path = tmp_path / ".ng_secret"
+    first = load_secret(path)
+    assert path.exists() and len(first) >= 32
+    assert load_secret(path) == first
+    monkeypatch.setenv("NG_SECRET", "from-env")
+    assert load_secret(path) == "from-env"

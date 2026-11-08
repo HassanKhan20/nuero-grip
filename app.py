@@ -2,6 +2,7 @@
 import logging
 import os
 import secrets
+from pathlib import Path
 import threading
 import time
 from functools import wraps
@@ -18,9 +19,24 @@ USERS = {"therapist": "therapist", "patient": "patient"}  # hackathon demo login
 log = logging.getLogger("neurogrip")
 
 
+SECRET_FILE = Path(__file__).resolve().parent / ".ng_secret"
+
+
+def load_secret(path: Path = SECRET_FILE) -> str:
+    """Session-signing key that survives restarts, so open tabs stay logged in (env NG_SECRET wins)."""
+    if os.environ.get("NG_SECRET"):
+        return os.environ["NG_SECRET"]
+    try:
+        return path.read_text().strip()
+    except FileNotFoundError:
+        key = secrets.token_hex(32)
+        path.write_text(key)
+        return key
+
+
 def create_app(engine, start: bool = True):
     app = Flask(__name__)
-    app.secret_key = os.environ.get("NG_SECRET", secrets.token_hex(16))
+    app.secret_key = load_secret()
     socketio = SocketIO(app, async_mode="threading")
 
     def login_required(fn):
