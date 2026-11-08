@@ -22,7 +22,7 @@ const ACTIONS = {
   login: "Signed in", logout: "Signed out", login_failed: "Failed sign-in", login_blocked: "Blocked (lockout)",
   denied: "Access denied", agent_review: "AI session review", triage_brief: "AI coordination brief",
   incident_declared: "Declared incident", incident_ack: "Acknowledged", incident_assign: "Assigned",
-  incident_note: "Note", incident_resolve: "Resolved", incident_reopen: "Reopened", incident_scope: "Scope changed",
+  incident_note: "Note", intent_zero: "Re-zeroed intent", incident_resolve: "Resolved", incident_reopen: "Reopened", incident_scope: "Scope changed",
 };
 
 // every detection rule that can open an incident (kinds match neurogrip/detect.py and app.py)

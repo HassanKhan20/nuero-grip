@@ -431,6 +431,7 @@ document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("clic
 document.querySelectorAll("[data-control]").forEach((b) => b.addEventListener("click", () => api("/api/control", "POST", { mode: b.dataset.control }).catch(fail)));
 document.querySelectorAll("[data-grip]").forEach((b) => b.addEventListener("click", () => api("/api/control", "POST", { mode: "intent", grip: b.dataset.grip }).catch(fail)));
 $("btn-cal").addEventListener("click", () => { openSheet(""); api("/api/calibrate").catch(fail); });
+$("btn-zero").addEventListener("click", () => api("/api/intent/zero").then((r) => toast(`Relax for ${r.seconds} s: taking a new zero`)).catch(fail));
 $("auto-intent").addEventListener("change", (e) => api("/api/intent/auto", "POST", { auto: e.target.checked }).catch(fail));
 
 let held = false;

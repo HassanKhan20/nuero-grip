@@ -86,3 +86,11 @@ def test_mind_control_page_is_open_to_both_roles_but_needs_login(made):
     r = c.get("/mind")
     assert r.status_code == 200 and b"Mind Control" in r.data
     assert b'href="/mind"' in c.get("/").data
+
+
+def test_session_page_has_zero_button_wired_to_the_endpoint(made):
+    app, c = made
+    _login(c, "patient")
+    assert b'id="btn-zero"' in c.get("/").data
+    assert c.post("/api/intent/zero").get_json()["ok"] is True
+    assert app.extensions["ng"]["audit"].list()[0]["action"] == "intent_zero"
