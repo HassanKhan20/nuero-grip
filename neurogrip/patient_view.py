@@ -2,7 +2,7 @@
 import json
 import os
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 KEEP = ("reps", "activation_rate", "session_s", "latency_ms_mean", "tremor_hz", "steadiness", "difficulty", "mode")
 
 PROMPT = """You are a friendly rehab assistant explaining a patient's progress in simple language.
