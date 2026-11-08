@@ -13,9 +13,20 @@ Clinical devices already solve this by moving the hand **only when the patient's
 3. **Gate:** the robotic hand copies that shape finger by finger, but only while the effort is there. If the patient stops trying, the hand stops.
 4. **Data:** every session records reps, how often the patient's effort was enough to move the hand, peak range of motion per finger, reaction time and tremor.
 5. **AI care loop:**
-   - **NVIDIA Nemotron** reviews each session using tool calls. It pulls the metrics and the patient's history, **raises or lowers the effort needed to trigger the hand**, raises an alert if anything is declining, and writes a 3-sentence clinical summary. Its reasoning appears before every tool call.
-   - **AI triage** ranks a 10-patient caseload as URGENT, MONITOR or STABLE, so one therapist can follow many patients at home.
+   - **NVIDIA Nemotron** reviews each session using tool calls. It pulls the metrics, the patient's history and any open incidents, **raises or lowers the effort needed to trigger the hand**, raises an alert or opens an incident if anything is declining, and writes a 3-sentence clinical summary. Its reasoning appears before every tool call.
    - **Gemini** explains the session to the patient in plain, encouraging language.
+6. **Surge triage:** after a disaster, 1,200 rehab patients across 5 districts lose access to care.
+   - **Every patient** gets an explainable 0-100 risk score, and a hard rule makes anyone with 3+ days without a session, or a declining trend, URGENT.
+   - Therapists are assigned to patients most-at-risk first. Anyone left without one goes on a ranked waitlist and opens a capacity-gap incident, so **no one is silently overlooked**.
+   - Nemotron reads the totals and writes the coordination plan.
+7. **Incident command center:** 10 live detection rules open incidents automatically, covering:
+   - lost sensors or camera
+   - sustained tremor
+   - slowing reactions
+   - repeated failed sign-ins
+   - unauthorized access
+
+   Each incident has a severity, scope, owner, status and timeline, plus live team messages. An audit log records every sign-in, AI action and change, and an isolated mode runs fully offline.
 
 The same loop works as a platform for other conditions:
 - **Parkinson's:** tremor frequency, plus a 10-second finger-tap test modelled on the clinical exam.
@@ -65,9 +76,9 @@ The difficulty level $\ell$ sets $f_\ell \in \{0.2, 0.3, 0.4, 0.5, 0.6\}$: the s
 **Software:**
 - A Python engine runs a 50 Hz loop.
 - A Flask + Socket.IO dashboard updates 10 times a second, with an interactive 3D hand built in Three.js.
-- Nemotron runs through NVIDIA's API with a real tool-calling loop. Gemini writes the patient view.
-- Sessions are stored in MongoDB Atlas.
-- There are separate therapist and patient logins.
+- Nemotron runs through NVIDIA's API with a real tool-calling loop of 6 tools, including reading and opening incidents. Gemini writes the patient view.
+- MongoDB Atlas stores sessions, events, patients, incidents and the audit log.
+- There are separate therapist and patient logins, with route-level access control and sign-in lockout.
 - **Three run modes:** full hardware; webcam only, holding Space to signal intent; and fully simulated. The demo can't be sunk by one broken component.
 
 ## Challenges we ran into
@@ -82,6 +93,7 @@ The difficulty level $\ell$ sets $f_\ell \in \{0.2, 0.3, 0.4, 0.5, 0.6\}$: the s
 
 - The core idea works end to end: **effort in, finger-by-finger movement out, and nothing moves without effort.**
 - An AI agent that does real work. It **changes the therapy**, not just summarizes it, and shows its reasoning at every step.
+- Triage that scales to 1,200 patients and **guarantees nobody is overlooked**: the safety rule runs in code on every patient, not only the ones the AI sees.
 - Every feature also works with just a laptop webcam, so anyone can try it.
 
 ## What we learned
