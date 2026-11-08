@@ -27,7 +27,7 @@ ARTIFACT_RATIO = 2.5    # a change > 2.5x this person's full focus isn't real fo
 ARTIFACT_REZERO = 100   # ~2 s of continuous artifact = new resting level (headband re-seated): re-zero to it
 DEBOUNCE_FRAMES = 4     # ~80 ms over the threshold before the hand moves (ignores one-frame blips)
 DRIFT_ALPHA = 0.004     # while clearly relaxed, the baseline follows slow drift (~5 s time constant at 50 Hz)
-OPPOSITE_DRIFT_ALPHA = 0.0008  # moves AGAINST the effort direction are followed 5x slower (~25 s), so a
+OPPOSITE_DRIFT_ALPHA = 0.002   # moves AGAINST the effort direction are followed 2x slower (~10 s), so a
                                # held effort the detector mislabels can't drag the baseline and fire on release
 
 

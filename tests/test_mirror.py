@@ -122,7 +122,7 @@ def test_held_opposite_change_does_not_fire_on_release():
     """Reading moves the 'wrong' way for 3 s, then returns: the baseline must not sink far enough to trigger."""
     from neurogrip.intent import IntentDetector, SiteRange
     d = IntentDetector(calib_frames=1, sites=("temple",))
-    d.fraction = 0.2  # level 1
+    d.fraction = 0.3  # level 1 after the noise floor on a real pad
     d.set_calibration((1000.0, 1000.0), SiteRange((0.01, 0.01), (-1, -1)))  # effort = reading rises 1%
     for i in range(150):
         d.update(Frame(i, 990, 1000, 0, 0, 1000))  # held 1% fall (opposite) for 3 s
