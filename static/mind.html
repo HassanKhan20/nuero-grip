@@ -174,8 +174,8 @@
         <span class="cam-tag" id="cam-tag" hidden></span>
       </div>
       <div class="modes" role="group" aria-label="How the robot hand moves">
-        <button type="button" data-mode="mirror" title="Robot copies each finger of your hand while you clench">Mirror my hand <kbd>M</kbd></button>
-        <button type="button" data-mode="intent" title="Clench alone closes the robot hand in a grip shape">Clench → grip <kbd>G</kbd></button>
+        <button type="button" data-mode="mirror" title="Robot copies each finger of your hand while you focus">Mirror my hand <kbd>M</kbd></button>
+        <button type="button" data-mode="intent" title="Focus alone closes the robot hand in a grip shape">Focus → grip <kbd>G</kbd></button>
       </div>
     </div>
     <div class="card">
@@ -198,12 +198,12 @@
       <button id="btn-zero" style="width:100%;margin-bottom:10px">Zero now (I'm relaxed)</button>
       <button class="primary" id="btn-cal">Calibrate to my effort</button>
       <p class="small"><b>Zero</b> after putting the headband on: stay relaxed for 2 s <kbd>Z</kbd>.
-        <b>Calibrate</b>: relax 2 s, then clench as hard as you can for 3 s, so the trigger fits <i>your</i> range <kbd>C</kbd>.</p>
+        <b>Calibrate</b>: relax 2 s, then focus as hard as you can for 3 s, so the trigger fits <i>your</i> range <kbd>C</kbd>.</p>
     </div>
   </aside>
 </main>
 
-<div class="overlay" id="overlay" hidden><div><h1 id="ov-title">Relax</h1><p id="ov-sub">Let your jaw go loose</p><div class="count" id="ov-count"></div></div></div>
+<div class="overlay" id="overlay" hidden><div><h1 id="ov-title">Relax</h1><p id="ov-sub">Clear your mind</p><div class="count" id="ov-count"></div></div></div>
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -250,7 +250,7 @@ function render(s) {
     hint = mirror ? (s.curls ? "The robot is copying your hand" : "Show your hand to the camera") : "Your effort is driving the hand";
   }
   else if (strength > 0.25) { state = "Building"; hint = "Almost there — a little harder"; }
-  else { state = "Relaxed"; hint = s.source_kind !== "hardware" ? "Hold Space to try" : mirror ? "Clench to let the robot copy your hand" : "Clench your jaw to move the hand"; }
+  else { state = "Relaxed"; hint = s.source_kind !== "hardware" ? "Hold Space to try" : mirror ? "Focus to let the robot copy your hand" : "Focus to move the hand"; }
   $("state").textContent = state; $("hint").textContent = hint;
 
   if (active && !wasActive && navigator.vibrate) navigator.vibrate(30);
@@ -261,8 +261,8 @@ function render(s) {
   const closed = angles.reduce((a, b) => a + b, 0) / (160 * 5);
   const pose = closed > 0.6 ? "closed" : closed > 0.1 ? "partly closed" : "open";
   $("hand-state").innerHTML = mirror
-    ? `Hand: <b>${pose}</b> · ${active && s.curls ? "<b>copying you</b>" : "holding: clench to copy"}`
-    : `Hand: <b>${pose}</b> · clench closes a <b>${s.grip}</b>`;
+    ? `Hand: <b>${pose}</b> · ${active && s.curls ? "<b>copying you</b>" : "holding: focus to copy"}`
+    : `Hand: <b>${pose}</b> · focus closes a <b>${s.grip}</b>`;
   document.querySelectorAll("[data-grip]").forEach((b) => b.classList.toggle("on", b.dataset.grip === s.grip && !mirror));
   document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === s.control_mode));
   $("grips").hidden = mirror;
@@ -284,8 +284,8 @@ function render(s) {
     ov.hidden = false;
     const squeeze = s.calibration_phase === "squeeze";
     ov.classList.toggle("squeeze", squeeze);
-    $("ov-title").textContent = squeeze ? "CLENCH!" : "Relax";
-    $("ov-sub").textContent = squeeze ? "As hard as you can — hold it" : "Let your jaw go loose";
+    $("ov-title").textContent = squeeze ? "FOCUS!" : "Relax";
+    $("ov-sub").textContent = squeeze ? "As hard as you can — hold it" : "Clear your mind";
     $("ov-count").textContent = (s.calibration_remaining_s || 0).toFixed(1) + " s";
   } else ov.hidden = true;
 
@@ -309,7 +309,7 @@ function renderCam(s, active) {
   else if (!camLive && !camRetry) startCam();
   else off.textContent = "Starting camera…";
   tag.hidden = !s.camera_ok;
-  tag.textContent = !s.curls ? "Hold your hand up, palm to the camera" : s.control_mode === "mirror" ? (active ? "● Robot copying" : "Clench to copy") : "Tracking";
+  tag.textContent = !s.curls ? "Hold your hand up, palm to the camera" : s.control_mode === "mirror" ? (active ? "● Robot copying" : "Focus to copy") : "Tracking";
   $("cam").classList.toggle("copying", s.control_mode === "mirror" && !!active && !!s.curls);
 }
 startCam();
@@ -344,7 +344,7 @@ socket.on("disconnect", () => chip("chip-conn", "bad", "Reconnecting"));
 socket.on("connect_error", () => chip("chip-conn", "bad", "Sign in on the dashboard first"));
 socket.on("state", render);
 socket.on("event", (e) => {
-  if (e.type === "calibrated") toast(`Calibrated · your full clench = ${e.temple_range_pct}% change. Trigger scaled to you.`);
+  if (e.type === "calibrated") toast(`Calibrated · your full focus = ${e.temple_range_pct}% change. Trigger scaled to you.`);
   if (e.type === "calibration_failed") toast(e.reason);
 });
 
@@ -365,7 +365,7 @@ window.addEventListener("blur", () => hold(false));
 document.querySelectorAll("[data-grip]").forEach((b) => b.addEventListener("click", () =>
   api("/api/control", { mode: "intent", grip: b.dataset.grip }).catch((err) => toast(err.message))));
 function setMode(mode) {
-  api("/api/control", { mode }).then(() => toast(mode === "mirror" ? "Mirror: clench and the robot copies your hand" : "Grip: clench closes the robot hand"))
+  api("/api/control", { mode }).then(() => toast(mode === "mirror" ? "Mirror: focus and the robot copies your hand" : "Grip: focus closes the robot hand"))
     .catch((err) => toast(err.message));
 }
 document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));

@@ -21,7 +21,7 @@ CAL_FRACTIONS = [0.2, 0.3, 0.4, 0.5, 0.6]  # share of personal range needed to c
 MIN_RANGE = 0.02                           # a site that changes less than 2% at full effort isn't usable
 SITE_NAMES = ("temple", "forearm")
 # After calibration (the capacitive pad is noisy: pressure, head movement, a hand on the power bank all move it):
-ARTIFACT_RATIO = 2.5    # a change > 2.5x this person's full clench isn't a clench: the pad moved / contact changed
+ARTIFACT_RATIO = 2.5    # a change > 2.5x this person's full focus isn't real focus: the pad moved / contact changed
 ARTIFACT_REZERO = 100   # ~2 s of continuous artifact = new resting level (headband re-seated): re-zero to it
 DEBOUNCE_FRAMES = 4     # ~80 ms over the threshold before the hand moves (ignores one-frame blips)
 DRIFT_ALPHA = 0.004     # while clearly relaxed, the baseline follows slow drift (~5 s time constant at 50 Hz)
@@ -50,7 +50,7 @@ class IntentState:
     strength: float
     temple_drop: float
     forearm_drop: float
-    artifact: bool = False  # reading jumped far beyond a clench (pad moved), so it was ignored
+    artifact: bool = False  # reading jumped far beyond full focus (pad moved), so it was ignored
     link_lost: bool = False  # sensor silent (headband off / out of range): the hand must open
 
 
@@ -72,7 +72,7 @@ def calibrate_from(relaxed: list[tuple[int, int]], effort: list[tuple[int, int]]
     full = SiteRange(full, directions)
     weak = [name for name, f in zip(SITE_NAMES, full) if name in sites and f < MIN_RANGE]
     if weak:
-        raise ValueError(f"no clear change on the {' and '.join(weak)} pad: check contact and squeeze harder")
+        raise ValueError(f"no clear change on the {' and '.join(weak)} pad: check contact and focus harder")
     return base, full
 
 

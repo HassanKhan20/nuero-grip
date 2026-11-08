@@ -4,7 +4,7 @@
 # Stops any running NeuroGrip app first: two apps fight over the webcam and the serial port.
 param(
     [string]$Port = "COM4",          # ESP32-S3 hand board
-    [string]$Control = "mirror",     # mirror = robot copies your hand while you clench | intent = clench closes a grip
+    [string]$Control = "mirror",     # mirror = robot copies your hand while you focus | intent = focus closes a grip
     [int]$Level = 1,                 # 1 = lowest trigger
     [int]$Camera = 0,
     [int]$WebPort = 5000
@@ -31,7 +31,7 @@ $env:NG_CONTROL = $Control; $env:NG_LEVEL = "$Level"; $env:NG_CAMERA = "$Camera"
 
 Write-Host ""
 Write-Host "NeuroGrip  ->  http://localhost:$WebPort/mind   (login therapist / therapist)"
-Write-Host "  Z = zero (relaxed)   C = calibrate   M = mirror my hand   G = clench-to-grip"
+Write-Host "  Z = zero (relaxed)   C = calibrate   M = mirror my hand   G = focus-to-grip"
 Write-Host ""
 Set-Location $root
 & $py app.py

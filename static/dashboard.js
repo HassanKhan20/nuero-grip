@@ -364,8 +364,8 @@ function renderOverlays(s) {
   $("cal-overlay").hidden = !cal;
   if (cal) {
     const sim = s.source_kind !== "hardware";
-    setText("cal-word", cal === "relax" ? "Relax" : "Squeeze");
-    setText("cal-help", cal === "relax" ? "Keep still" : `Clench your jaw and squeeze hard${sim ? " (hold Space)" : ""}`);
+    setText("cal-word", cal === "relax" ? "Relax" : "Focus");
+    setText("cal-help", cal === "relax" ? "Keep still" : `Focus as hard as you can${sim ? " (hold Space)" : ""}`);
     setText("cal-left", Math.ceil(s.calibration_remaining_s));
     $("cal-overlay").classList.toggle("squeeze", cal === "squeeze");
   }

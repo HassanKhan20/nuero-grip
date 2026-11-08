@@ -2,7 +2,7 @@
 
     .venv\\Scripts\\python scripts\\pad_graph.py [COM3]
 
-Put the pad ON, sit relaxed, press B to take the baseline while wearing it. Then clench your jaw:
+Put the pad ON, sit relaxed, press B to take the baseline while wearing it. Then focus:
 the temple line should rise clearly and fall back to ~0 when you relax. The y-axis zooms to the signal,
 so even a few % is visible. Press B again any time to re-baseline. Close the window to stop.
 """
@@ -60,7 +60,7 @@ def main():
     (lt,) = ax.plot([], [], lw=2.5, color="#5562D6", label="Temple pad (headband, IO32)")
     (lf,) = ax.plot([], [], lw=1.5, color="#5FB3B3", alpha=0.8, label="Forearm pad (IO33)")
     ax.axhline(GOOD_PCT, ls="--", color="#B7791F", lw=1)
-    ax.text(0.01, GOOD_PCT + 0.6, f"{GOOD_PCT}% = good clench", transform=ax.get_yaxis_transform(), color="#B7791F")
+    ax.text(0.01, GOOD_PCT + 0.6, f"{GOOD_PCT}% = good focus", transform=ax.get_yaxis_transform(), color="#B7791F")
     ax.axhline(0, color="#999", lw=0.8)
     ax.set_xlabel("seconds")
     ax.set_ylabel("change from relaxed (%)")

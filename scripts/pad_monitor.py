@@ -2,8 +2,8 @@
 
     .venv\\Scripts\\python scripts\\pad_monitor.py [COM3]
 
-Sit still for the first 2 s (baseline), then clench your jaw. A good pad shows a clear, repeatable
-change (10%+) when you clench and returns to ~0% when you relax. Ctrl+C to stop.
+Sit still for the first 2 s (baseline), then focus. A good pad shows a clear, repeatable
+change (10%+) when you focus and returns to ~0% when you relax. Ctrl+C to stop.
 """
 import statistics
 import sys
@@ -34,7 +34,7 @@ def main():
         sys.exit("No sensor data: is the NeuroGrip firmware flashed and COM port right?")
     bt = statistics.median(b[0] for b in base)
     bf = statistics.median(b[1] for b in base)
-    print(f"Baseline temple={bt:.0f} forearm={bf:.0f}. Now clench / relax. Ctrl+C to stop.\n")
+    print(f"Baseline temple={bt:.0f} forearm={bf:.0f}. Now focus / relax. Ctrl+C to stop.\n")
     peak_t = 0.0
     last = 0.0
     try:
