@@ -5,6 +5,8 @@ motor-intent rehabilitation platform. headband detects cognitive/motor intent, C
 
 ## run it
 
+**Quickest:** double-click `start.bat` (camera mode, opens the browser). `start.bat mock` runs with no camera; `start.bat hardware COM5` uses the ESP32. The first run sets up Python automatically.
+
 ```powershell
 py -3.10 -m venv .venv          # mediapipe needs Python 3.10–3.12
 .venv\Scripts\pip install -r requirements.txt
