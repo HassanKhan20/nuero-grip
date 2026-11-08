@@ -171,8 +171,10 @@
     </div>
     <div class="card">
       <h2>Calibration</h2>
+      <button id="btn-zero" style="width:100%;margin-bottom:10px">Zero now (I'm relaxed)</button>
       <button class="primary" id="btn-cal">Calibrate to my effort</button>
-      <p class="small">Relax for 2 s, then clench your jaw as hard as you can for 3 s. NeuroGrip scales the trigger to <i>your</i> range. Shortcut: <kbd>C</kbd></p>
+      <p class="small"><b>Zero</b> after putting the headband on: stay relaxed for 2 s <kbd>Z</kbd>.
+        <b>Calibrate</b>: relax 2 s, then clench as hard as you can for 3 s, so the trigger fits <i>your</i> range <kbd>C</kbd>.</p>
     </div>
   </aside>
 </main>
@@ -292,6 +294,11 @@ socket.on("event", (e) => {
 
 async function calibrate() { try { await api("/api/calibrate"); } catch (err) { toast(err.message); } }
 $("btn-cal").addEventListener("click", calibrate);
+async function zero() {
+  try { const r = await api("/api/intent/zero"); toast(`Zeroing: stay relaxed for ${r.seconds} s…`); } catch (err) { toast(err.message); }
+}
+$("btn-zero").addEventListener("click", zero);
+document.addEventListener("keydown", (e) => { if ((e.key === "z" || e.key === "Z") && !e.repeat) zero(); });
 document.addEventListener("keydown", (e) => { if ((e.key === "c" || e.key === "C") && !e.repeat) calibrate(); });
 // camera/mock mode stand-in for the headband: hold Space to "try"
 let held = false;

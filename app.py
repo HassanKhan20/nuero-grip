@@ -213,6 +213,14 @@ def create_app(engine, start: bool = True):
         engine.start_calibration()
         return jsonify(ok=True)
 
+    @app.post("/api/intent/zero")
+    @login_required
+    def api_intent_zero():
+        """Treat the wearer's current state as relaxed (0 effort): re-reads the baseline over ~2 s."""
+        engine.intent.rezero()
+        audit.record(actor(), "intent_zero", "Intent baseline re-zeroed", ip())
+        return jsonify(ok=True, seconds=round(engine.intent.calib_frames * 0.02, 1))
+
     @app.post("/api/control")
     @login_required
     def api_control():

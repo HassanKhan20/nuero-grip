@@ -75,7 +75,15 @@ class IntentDetector:
     def set_calibration(self, baseline: tuple[float, float], full: tuple[float, float]) -> None:
         self._baseline, self.full = baseline, full
 
+    def rezero(self) -> None:
+        """Take a fresh relaxed baseline from the next frames (e.g. after putting the headband on).
+        Applied on the next update() so it is safe to call from another thread."""
+        self._rezero_pending = True
+
     def update(self, f: SensorFrame) -> IntentState:
+        if getattr(self, "_rezero_pending", False):
+            self._rezero_pending = False
+            self._baseline, self.full, self._calib = None, None, []
         raw = (f.temple, f.forearm)
         if any(raw[i] <= 0 for i in self._idx):  # no signal (wireless headband silent)
             return IntentState(self._baseline is not None, False, 0.0, 0.0, 0.0)

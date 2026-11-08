@@ -159,3 +159,18 @@ def test_calibration_temple_only_does_not_require_forearm():
     d = IntentDetector(sites=("temple",))
     d.set_calibration(base, full)
     assert d.update(SensorFrame(0, 340, 400, 0, 0, 1000)).active
+
+
+def test_rezero_takes_new_relaxed_baseline():
+    d = IntentDetector(threshold=0.14, calib_frames=10, sites=("temple",))
+    _baseline(d, v=(1300, 400))
+    assert d.update(SensorFrame(20, 650, 400, 0, 0, 1000)).active  # headband put on: looks like a huge clench
+    d.set_calibration((1300.0, 400.0), (0.5, 0.5))
+    d.rezero()
+    for i in range(10):
+        s = d.update(SensorFrame(30 + i, 650, 400, 0, 0, 1000))
+        assert not s.active  # re-reading the relaxed level
+    s = d.update(SensorFrame(50, 650, 400, 0, 0, 1000))
+    assert s.calibrated and not s.active and s.strength == 0.0
+    assert not d.range_calibrated  # old full-effort range no longer applies
+    assert d.update(SensorFrame(51, 540, 400, 0, 0, 1000)).active  # a real clench from the new zero
