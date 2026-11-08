@@ -4,7 +4,7 @@
 # Stops any running NeuroGrip app first: two apps fight over the webcam and the serial port.
 param(
     [string]$Port = "COM4",          # ESP32-S3 hand board
-    [string]$Control = "mirror",     # mirror = robot copies your hand while you focus | intent = focus closes a grip
+    [string]$Control = "intent",     # intent = focus closes the hand (fist) | mirror = robot copies your hand while you focus
     [int]$Level = 1,                 # 1 = lowest trigger
     [int]$Camera = 0,
     [int]$WebPort = 5000

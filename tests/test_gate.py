@@ -75,7 +75,7 @@ def test_intent_mode_pinch_pattern():
 
 
 def test_wave_grip_closes_thumb_before_pinky():
-    half = IntentState(True, True, 0.75, 0.2, 0.2)  # closure 0.5
+    half = IntentState(True, True, 0.625, 0.2, 0.2)  # closure 0.5
     g = _intent_gate("wave")
     for _ in range(60):
         out = g.step(half, VisionResult(None))

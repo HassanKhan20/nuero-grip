@@ -93,3 +93,11 @@ def test_calibration_survives_restart(tmp_path):
     b = Engine(MockSource(), MockVision(), MemoryStore(), kind="hardware")
     assert b.load_range(path) and b.intent.range_calibrated
     assert b.intent.full.directions == (1, -1) and b.intent.full.noise == (0.002, 0.0)
+
+
+def test_normal_focus_closes_fist_fully():
+    g = Gate()
+    g.control, g.grip = "intent", "fist"
+    for _ in range(60):
+        out = g.step(IntentState(True, True, 0.75, 0.2, 0.2), VisionResult(None))
+    assert out.angles == (128, 160, 160, 160, 160)
