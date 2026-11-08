@@ -2,8 +2,9 @@
 
     .venv\\Scripts\\python scripts\\pad_graph.py [COM3]
 
-Sit still for the first 2 s (baseline). Then clench your jaw: the temple line should jump above the
-dashed 10% line and fall back to ~0 when you relax. Close the window to stop.
+Put the pad ON, sit relaxed, press B to take the baseline while wearing it. Then clench your jaw:
+the temple line should rise clearly and fall back to ~0 when you relax. The y-axis zooms to the signal,
+so even a few % is visible. Press B again any time to re-baseline. Close the window to stop.
 """
 import collections
 import statistics
@@ -23,7 +24,7 @@ WINDOW_S = 10
 GOOD_PCT = 10
 
 data = collections.deque(maxlen=WINDOW_S * 50)  # (t, temple, forearm) at ~50 Hz
-state = {"base": None, "peak": 0.0}
+state = {"base": None, "peak": 0.0, "rebase": False}
 
 
 def reader(s: serial.Serial) -> None:
@@ -33,6 +34,11 @@ def reader(s: serial.Serial) -> None:
         if not f:
             continue
         t = time.time() - t0
+        if state["rebase"]:
+            state.update(base=None, peak=0.0, rebase=False)
+            calib, t0 = [], time.time()
+            data.clear()
+            continue
         if state["base"] is None:
             calib.append((f.temple, f.forearm))
             if t >= 2 and calib:
@@ -60,6 +66,13 @@ def main():
     ax.set_ylabel("change from relaxed (%)")
     ax.legend(loc="upper right")
     title = ax.set_title("Measuring baseline: sit still and relaxed...", fontsize=14)
+    fig.text(0.01, 0.01, "Press B to re-baseline (do it while WEARING the pad, relaxed)", color="#5B6478")
+
+    def on_key(ev):
+        if ev.key in ("b", "B", " "):
+            state["rebase"] = True
+            title.set_text("Measuring baseline: sit still and relaxed...")
+    fig.canvas.mpl_connect("key_press_event", on_key)
 
     def update(_):
         if state["base"] is None:
@@ -69,12 +82,14 @@ def main():
             lt.set_data(ts, dts)
             lf.set_data(ts, dfs)
             ax.set_xlim(max(0, ts[-1] - WINDOW_S), max(WINDOW_S, ts[-1]))
-            top = max(25, max(dts) + 5, max(dfs) + 5)
-            ax.set_ylim(min(-5, min(dts) - 2, min(dfs) - 2), top)
+            lo, hi = min(min(dts), min(dfs)), max(max(dts), max(dfs))
+            pad = max(1.0, (hi - lo) * 0.15)
+            ax.set_ylim(min(-2, lo - pad), max(GOOD_PCT + 2 if hi > GOOD_PCT / 2 else 5, hi + pad))
             now, peak = dts[-1], state["peak"]
-            verdict = "GOOD" if peak >= GOOD_PCT else "weak: firmer strap / thinner foam" if peak >= 3 else "no response yet"
-            title.set_text(f"Temple now {now:+.1f}%   ·   peak {peak:.1f}%  ({verdict})   ·   clench your jaw")
-            title.set_color("#2E7D5B" if peak >= GOOD_PCT else "#1B2233")
+            verdict = ("strong" if peak >= GOOD_PCT else "usable: the app's calibration scales this up" if peak >= 2
+                       else "too small: move the pad / tighten strap")
+            title.set_text(f"Temple now {now:+.1f}%   ·   peak {peak:.1f}%  ({verdict})")
+            title.set_color("#2E7D5B" if peak >= 2 else "#1B2233")
         return lt, lf, title
 
     _anim = FuncAnimation(fig, update, interval=100, cache_frame_data=False)
