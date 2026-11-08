@@ -18,7 +18,9 @@ import numpy as np
 from .protocol import SensorFrame
 
 CAL_FRACTIONS = [0.2, 0.3, 0.4, 0.5, 0.6]  # share of personal range needed to count as trying, per level
-MIN_RANGE = 0.02                           # a site that changes less than 2% at full effort isn't usable
+MIN_RANGE = 0.006                          # floor: a site that changes less than 0.6% at full effort isn't usable
+NOISE_MARGIN = 4.0                         # ...and full effort must stand at least 4x above the relaxed jitter
+NOISE_TRIGGER = 2.5                        # the trigger never sits closer than 2.5x the relaxed jitter
 SITE_NAMES = ("temple", "forearm")
 # After calibration (the capacitive pad is noisy: pressure, head movement, a hand on the power bank all move it):
 ARTIFACT_RATIO = 2.5    # a change > 2.5x this person's full focus isn't real focus: the pad moved / contact changed
@@ -31,9 +33,10 @@ class SiteRange(tuple):
     """Full-effort change per site (temple, forearm), plus which way each reading moves on effort:
     +1 = falls (classic ESP32 touch), -1 = rises (ESP32-S3 touch). Learned during calibration."""
 
-    def __new__(cls, values, directions=(1, 1)):
+    def __new__(cls, values, directions=(1, 1), noise=(0.0, 0.0)):
         obj = super().__new__(cls, values)
         obj.directions = tuple(directions)
+        obj.noise = tuple(noise)  # relaxed jitter per site (90th percentile), same units as values
         return obj
 
 
@@ -69,8 +72,10 @@ def calibrate_from(relaxed: list[tuple[int, int]], effort: list[tuple[int, int]]
     full = tuple(float(np.percentile(np.abs(base[i] - e[:, i]) / base[i], 90)) if base[i] else 0.0
                  for i in (0, 1))
     directions = tuple(1 if float(np.median(base[i] - e[:, i])) >= 0 else -1 for i in (0, 1))
-    full = SiteRange(full, directions)
-    weak = [name for name, f in zip(SITE_NAMES, full) if name in sites and f < MIN_RANGE]
+    noise = tuple(float(np.percentile(np.abs(base[i] - r[:, i]) / base[i], 90)) if base[i] else 0.0 for i in (0, 1))
+    full = SiteRange(full, directions, noise)
+    weak = [name for i, (name, f) in enumerate(zip(SITE_NAMES, full))
+            if name in sites and f < max(MIN_RANGE, NOISE_MARGIN * noise[i])]
     if weak:
         raise ValueError(f"no clear change on the {' and '.join(weak)} pad: check contact and focus harder")
     return base, full
@@ -125,7 +130,9 @@ class IntentDetector:
         return IntentState(True, active, round(max(0.0, min(1.0, strength)), 3), round(t, 3), round(fa, 3))
 
     def _calibrated_update(self, raw: tuple[int, int], t: float, fa: float) -> IntentState:
-        base, fr = self._baseline, self.fraction
+        base = self._baseline
+        noise = getattr(self.full, "noise", (0.0, 0.0))
+        fr = min(0.7, max([self.fraction] + [NOISE_TRIGGER * noise[i] / self.full[i] for i in self._idx if self.full[i]]))
         dirs = getattr(self, "_dir", (1, 1))
         # signed change: only movement in this person's effort direction counts
         signed = [dirs[i] * (base[i] - raw[i]) / base[i] if base[i] else 0.0 for i in (0, 1)]
