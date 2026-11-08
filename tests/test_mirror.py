@@ -128,3 +128,24 @@ def test_held_opposite_change_does_not_fire_on_release():
         d.update(Frame(i, 990, 1000, 0, 0, 1000))  # held 1% fall (opposite) for 3 s
     states = [d.update(Frame(200 + i, 1000, 1000, 0, 0, 1000)) for i in range(10)]  # let go
     assert not any(s.active for s in states)
+
+
+def test_focus_bigger_than_calibration_reads_full_not_artifact():
+    """Calibrated on a light focus (0.45%), then a strong 1.5-2% focus: must be 100% active, and holding it
+    must not re-zero the baseline to the focused level (which made letting go look like the 'focus')."""
+    from neurogrip.intent import IntentDetector, SiteRange
+    d = IntentDetector(calib_frames=1, sites=("temple",))
+    d.fraction = 0.2
+    d.set_calibration((1135.0, 1000.0), SiteRange((0.0045, 0.01), (-1, 1), (0.001, 0.0)))
+    states = [d.update(Frame(i, 1152, 1000, 0, 0, 1000)) for i in range(150)]  # +1.5% held 3 s
+    assert all(s.active and s.strength == 1.0 for s in states[5:])
+    assert not any(s.artifact for s in states)
+    relaxed = [d.update(Frame(300 + i, 1135, 1000, 0, 0, 1000)) for i in range(10)]
+    assert not any(s.active for s in relaxed)
+
+
+def test_huge_jump_still_counts_as_artifact():
+    from neurogrip.intent import IntentDetector, SiteRange
+    d = IntentDetector(calib_frames=1, sites=("temple",))
+    d.set_calibration((1135.0, 1000.0), SiteRange((0.0045, 0.01), (-1, 1), (0.001, 0.0)))
+    assert d.update(Frame(1, 1250, 1000, 0, 0, 1000)).artifact  # +10%: pad moved
