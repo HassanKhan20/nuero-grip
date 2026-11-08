@@ -231,7 +231,7 @@ def test_calibration_flow():
         e.step()
     assert e.state()["calibration_phase"] == "squeeze"
     ctl.held = True
-    for _ in range(151):
+    for _ in range(151 + 4):  # +4: intent must be held ~80 ms (debounce) before it counts
         e.step()
     s = e.state()
     assert s["calibration_phase"] is None and s["range_calibrated"]

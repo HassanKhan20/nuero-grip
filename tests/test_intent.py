@@ -84,7 +84,7 @@ def test_calibrated_range_scales_strength():
     d = _calibrated_detector()
     assert d.range_calibrated
     assert not d.update(SensorFrame(10, 62, 62, 0, 0, 1000)).active      # 38% of range < 40% (level 3)
-    full = d.update(SensorFrame(11, 49, 49, 0, 0, 1000))                 # full squeeze
+    full = [d.update(SensorFrame(11 + i, 49, 49, 0, 0, 1000)) for i in range(4)][-1]  # full squeeze, held
     assert full.active and full.strength == 1.0
     mid = d.update(SensorFrame(12, 55, 55, 0, 0, 1000))                  # ~71% of range
     assert mid.active and 0.7 < mid.strength < 0.8
@@ -158,7 +158,7 @@ def test_calibration_temple_only_does_not_require_forearm():
         calibrate_from(relaxed, effort, sites=("temple", "forearm"))
     d = IntentDetector(sites=("temple",))
     d.set_calibration(base, full)
-    assert d.update(SensorFrame(0, 340, 400, 0, 0, 1000)).active
+    assert [d.update(SensorFrame(i, 340, 400, 0, 0, 1000)).active for i in range(4)][-1]
 
 
 def test_rezero_takes_new_relaxed_baseline():
@@ -174,3 +174,55 @@ def test_rezero_takes_new_relaxed_baseline():
     assert s.calibrated and not s.active and s.strength == 0.0
     assert not d.range_calibrated  # old full-effort range no longer applies
     assert d.update(SensorFrame(51, 540, 400, 0, 0, 1000)).active  # a real clench from the new zero
+
+
+
+def _calibrated(full=0.10, base=1000):
+    from neurogrip.intent import calibrate_from
+    relaxed = [(base, 400)] * 20
+    effort = [(int(base * (1 - full)), 400)] * 20
+    b, f = calibrate_from(relaxed, effort, sites=("temple",))
+    d = IntentDetector(sites=("temple",))
+    d.set_calibration(b, f)
+    return d
+
+
+def _run(d, temple, n, start=0):
+    return [d.update(SensorFrame(start + i, temple, 400, 0, 0, 1000)) for i in range(n)]
+
+
+def test_reading_moving_the_wrong_way_is_not_effort():
+    d = _calibrated()  # classic ESP32: effort makes the reading FALL
+    states = _run(d, 1200, 10)  # pad lifts off the skin: reading rises 20%
+    assert not any(s.active for s in states) and states[-1].strength == 0.0
+
+
+def test_huge_change_is_an_artifact_not_a_clench():
+    d = _calibrated(full=0.10)
+    states = _run(d, 500, 10)  # 50% drop = 5x the full clench: pad moved / power bank handled
+    assert not any(s.active for s in states)
+    assert states[-1].strength == 0.0 and states[-1].artifact
+
+
+def test_single_frame_blip_does_not_move_the_hand():
+    d = _calibrated(full=0.10)
+    _run(d, 1000, 5)
+    assert not d.update(SensorFrame(10, 920, 400, 0, 0, 1000)).active  # one frame over threshold
+    assert not _run(d, 1000, 1, 11)[0].active
+    states = _run(d, 920, 6, 20)  # a held clench
+    assert states[-1].active
+
+
+def test_slow_drift_while_relaxed_is_tracked():
+    d = _calibrated(full=0.10)
+    states = [d.update(SensorFrame(i, int(1000 - 60 * i / 1500), 400, 0, 0, 1000)) for i in range(1500)]
+    assert not any(s.active for s in states)  # drifted 6% over 30 s without ever "clenching"
+    assert states[-1].strength < 0.3
+    assert _run(d, int(940 * 0.9), 6, 2000)[-1].active  # a real clench from the drifted level still works
+
+
+def test_sustained_artifact_rezeroes_automatically():
+    d = _calibrated(full=0.10)
+    _run(d, 500, 120)  # headband re-seated: new resting level held for >2 s
+    assert not _run(d, 500, 5, 200)[-1].active
+    assert _run(d, 450, 6, 300)[-1].active  # a clench from the new resting level works again

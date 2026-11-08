@@ -20,6 +20,21 @@ from .protocol import SensorFrame
 CAL_FRACTIONS = [0.2, 0.3, 0.4, 0.5, 0.6]  # share of personal range needed to count as trying, per level
 MIN_RANGE = 0.02                           # a site that changes less than 2% at full effort isn't usable
 SITE_NAMES = ("temple", "forearm")
+# After calibration (the capacitive pad is noisy: pressure, head movement, a hand on the power bank all move it):
+ARTIFACT_RATIO = 2.5    # a change > 2.5x this person's full clench isn't a clench: the pad moved / contact changed
+ARTIFACT_REZERO = 100   # ~2 s of continuous artifact = new resting level (headband re-seated): re-zero to it
+DEBOUNCE_FRAMES = 4     # ~80 ms over the threshold before the hand moves (ignores one-frame blips)
+DRIFT_ALPHA = 0.004     # while clearly relaxed, the baseline follows slow drift (~5 s time constant at 50 Hz)
+
+
+class SiteRange(tuple):
+    """Full-effort change per site (temple, forearm), plus which way each reading moves on effort:
+    +1 = falls (classic ESP32 touch), -1 = rises (ESP32-S3 touch). Learned during calibration."""
+
+    def __new__(cls, values, directions=(1, 1)):
+        obj = super().__new__(cls, values)
+        obj.directions = tuple(directions)
+        return obj
 
 
 def sites_from_env() -> tuple[str, ...]:
@@ -35,6 +50,7 @@ class IntentState:
     strength: float
     temple_drop: float
     forearm_drop: float
+    artifact: bool = False  # reading jumped far beyond a clench (pad moved), so it was ignored
 
 
 def _drop(baseline: float, value: float) -> float:
@@ -51,6 +67,8 @@ def calibrate_from(relaxed: list[tuple[int, int]], effort: list[tuple[int, int]]
     base = (float(np.median(r[:, 0])), float(np.median(r[:, 1])))
     full = tuple(float(np.percentile(np.abs(base[i] - e[:, i]) / base[i], 90)) if base[i] else 0.0
                  for i in (0, 1))
+    directions = tuple(1 if float(np.median(base[i] - e[:, i])) >= 0 else -1 for i in (0, 1))
+    full = SiteRange(full, directions)
     weak = [name for name, f in zip(SITE_NAMES, full) if name in sites and f < MIN_RANGE]
     if weak:
         raise ValueError(f"no clear change on the {' and '.join(weak)} pad: check contact and squeeze harder")
@@ -73,7 +91,9 @@ class IntentDetector:
         return self.full is not None
 
     def set_calibration(self, baseline: tuple[float, float], full: tuple[float, float]) -> None:
-        self._baseline, self.full = baseline, full
+        self._baseline, self.full = tuple(baseline), full
+        self._dir = getattr(full, "directions", (1, 1))
+        self._above = self._artifact_frames = 0
 
     def rezero(self) -> None:
         """Take a fresh relaxed baseline from the next frames (e.g. after putting the headband on).
@@ -97,12 +117,31 @@ class IntentDetector:
         fa = _drop(self._baseline[1], f.forearm)
         drops = (t, fa)
         if self.full is not None:
-            n = min(drops[i] / self.full[i] for i in self._idx)
-            fr = self.fraction
-            active = n >= fr
-            # 0.5 exactly at the threshold, 1.0 at this person's full effort
-            strength = 0.5 * n / fr if n < fr else 0.5 + 0.5 * min(1.0, (n - fr) / (1 - fr))
+            return self._calibrated_update(raw, t, fa)
         else:
             active = all(drops[i] >= self.threshold for i in self._idx)
             strength = min(drops[i] for i in self._idx) / (2 * self.threshold)
+        return IntentState(True, active, round(max(0.0, min(1.0, strength)), 3), round(t, 3), round(fa, 3))
+
+    def _calibrated_update(self, raw: tuple[int, int], t: float, fa: float) -> IntentState:
+        base, fr = self._baseline, self.fraction
+        dirs = getattr(self, "_dir", (1, 1))
+        # signed change: only movement in this person's effort direction counts
+        signed = [dirs[i] * (base[i] - raw[i]) / base[i] if base[i] else 0.0 for i in (0, 1)]
+        if any(abs(signed[i]) > ARTIFACT_RATIO * self.full[i] for i in self._idx):
+            self._above = 0
+            self._artifact_frames = getattr(self, "_artifact_frames", 0) + 1
+            if self._artifact_frames >= ARTIFACT_REZERO:  # it stayed there: that's the new resting level
+                self._baseline = tuple(float(raw[i]) if i in self._idx else base[i] for i in (0, 1))
+                self._artifact_frames = 0
+            return IntentState(True, False, 0.0, round(t, 3), round(fa, 3), artifact=True)
+        self._artifact_frames = 0
+        n = min(max(0.0, signed[i]) / self.full[i] for i in self._idx)
+        self._above = getattr(self, "_above", 0) + 1 if n >= fr else 0
+        active = self._above >= DEBOUNCE_FRAMES
+        # 0.5 exactly at the threshold, 1.0 at this person's full effort
+        strength = 0.5 * n / fr if n < fr else 0.5 + 0.5 * min(1.0, (n - fr) / (1 - fr))
+        if n < fr * 0.5:  # clearly relaxed: let the baseline follow slow drift
+            self._baseline = tuple(base[i] + DRIFT_ALPHA * (raw[i] - base[i]) if i in self._idx else base[i]
+                                   for i in (0, 1))
         return IntentState(True, active, round(max(0.0, min(1.0, strength)), 3), round(t, 3), round(fa, 3))
