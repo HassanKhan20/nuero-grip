@@ -113,3 +113,49 @@ def test_realtime_mock_accel_is_uniformly_sampled():
     frames = [src.read() for _ in range(256)]  # read as fast as possible: wall time barely moves
     mag = np.array([math.sqrt(f.ax ** 2 + f.ay ** 2 + f.az ** 2) for f in frames])
     assert abs(tremor_frequency(mag) - 5) < 0.4
+
+
+def _baseline(d, n=10, v=(400, 400)):
+    for i in range(n):
+        d.update(SensorFrame(i, v[0], v[1], 0, 0, 1000))
+
+
+def test_temple_only_mode_ignores_forearm():
+    d = IntentDetector(threshold=0.14, calib_frames=10, sites=("temple",))
+    _baseline(d)
+    assert d.update(SensorFrame(11, 300, 400, 0, 0, 1000)).active  # temple alone is enough
+
+
+def test_sites_from_env(monkeypatch):
+    monkeypatch.setenv("NG_INTENT_SITES", "temple")
+    assert IntentDetector().sites == ("temple",)
+    monkeypatch.delenv("NG_INTENT_SITES")
+    assert IntentDetector().sites == ("temple", "forearm")
+
+
+def test_lost_headband_link_reads_as_no_intent():
+    d = IntentDetector(threshold=0.14, calib_frames=10, sites=("temple",))
+    _baseline(d)
+    s = d.update(SensorFrame(11, 0, 400, 0, 0, 1000))  # hand board sends 0 when the headband is silent
+    assert s.calibrated and not s.active and s.strength == 0.0
+
+
+def test_link_lost_frames_skipped_during_baseline():
+    d = IntentDetector(calib_frames=10, sites=("temple",))
+    for i in range(10):
+        d.update(SensorFrame(i, 0, 400, 0, 0, 1000))
+    assert not d.update(SensorFrame(10, 0, 400, 0, 0, 1000)).calibrated
+
+
+def test_calibration_temple_only_does_not_require_forearm():
+    import pytest
+    from neurogrip.intent import calibrate_from
+    relaxed = [(400, 400)] * 20
+    effort = [(340, 400)] * 20  # temple moves 15%, forearm flat
+    base, full = calibrate_from(relaxed, effort, sites=("temple",))
+    assert round(full[0], 2) == 0.15
+    with pytest.raises(ValueError):
+        calibrate_from(relaxed, effort, sites=("temple", "forearm"))
+    d = IntentDetector(sites=("temple",))
+    d.set_calibration(base, full)
+    assert d.update(SensorFrame(0, 340, 400, 0, 0, 1000)).active
