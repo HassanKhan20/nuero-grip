@@ -15,14 +15,14 @@
 #include <ESP32Servo.h>
 
 // ---- pins (from the team's servo test sketch) ----
-const int SERVO_PINS[5] = {13, 12, 11, 10, 9};  // thumb, index, middle, ring, pinky
+const int SERVO_PINS[5] = {13, 9, 11, 10, 12};  // thumb, index, middle, ring, pinky
 const int PIN_BUZZER    = -1;                     // set a GPIO to enable, e.g. 4
 const int PIN_LED_GREEN = -1;                     // e.g. 5
 const int PIN_LED_RED   = -1;                     // e.g. 6
 
 const int NUM_SERVOS = 5;
 const int APP_MAX = 160;          // the app sends 0..160
-const int SERVO_OUT_MAX = 180;    // this hand closes fully at 180 (from the test sketch)
+const int SERVO_OUT_MAX[5] = {70, 180, 180, 180, 180};  // fully closed angle per finger (thumb only needs 70)
 const unsigned long SAMPLE_MS = 20;        // 50 Hz to the laptop
 const unsigned long WATCHDOG_MS = 500;
 const unsigned long HEADBAND_STALE_MS = 300;
@@ -60,7 +60,7 @@ void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
 void setServos(const int *vals) {
   for (int i = 0; i < NUM_SERVOS; i++) {
     int v = constrain(vals[i], 0, APP_MAX);
-    servos[i].write(map(v, 0, APP_MAX, 0, SERVO_OUT_MAX));
+    servos[i].write(map(v, 0, APP_MAX, 0, SERVO_OUT_MAX[i]));
   }
 }
 
@@ -119,7 +119,7 @@ void setup() {
   WiFi.disconnect();
   esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
   bool ok = esp_now_init() == ESP_OK && esp_now_register_recv_cb(onRecv) == ESP_OK;
-  Serial.printf("# NeuroGrip hand firmware | ESP32-S3 | servos 13,12,11,10,9 | ESP-NOW %s ch%d | waiting for headband\n",
+  Serial.printf("# NeuroGrip hand firmware | ESP32-S3 | servos T13 I9 M11 R10 P12 | ESP-NOW %s ch%d | waiting for headband\n",
                 ok ? "ready" : "FAILED", ESPNOW_CHANNEL);
 }
 
