@@ -176,7 +176,7 @@ function renderCallouts(s) {
     el.querySelector('[data-co="pct"]').textContent = `${Math.round((now / 160) * 100)}% closed`;
     el.querySelector('[data-co="bar"]').style.width = `${(now / 160) * 100}%`;
     el.querySelector('[data-co="peak"]').style.left = `calc(${(peak / 160) * 100}% - 1px)`;
-    el.querySelector('[data-co="peaklabel"]').textContent = `Peak ${peak}° · ${Math.round((peak / 160) * 100)}% range this session`;
+    el.querySelector('[data-co="peaklabel"]').textContent = `Session peak ${peak}° · ${Math.round((peak / 160) * 100)}%`;
   });
   const w = callouts.wrist;
   if (w) {
@@ -232,6 +232,7 @@ const wave = [];
 const waveY = (v) => 42 - v * 40;
 function drawWave() {
   $("wave-line").setAttribute("points", wave.map((v, i) => `${(i / 99) * 200},${waveY(v)}`).join(" "));
+  if (wave.length) { $("wave-live").setAttribute("cx", ((wave.length - 1) / 99) * 200); $("wave-live").setAttribute("cy", waveY(wave.at(-1))); }
 }
 $("wave").addEventListener("pointermove", (e) => {
   if (!wave.length) return;

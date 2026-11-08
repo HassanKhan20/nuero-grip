@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" fill="none" stroke="#1B2233" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+  <!-- high-rise skyline: stepped verticals along the bottom -->
+  <g opacity=".07">
+    <path d="M0 1000V820h40V760h30v-60h24v120h36V700h28v-90h32v210h40V740h26v-40h30v300"/>
+    <path d="M1180 1000V780h34v-90h26v-70h30v160h40V640h28v-60h36v220h30v-80h40v120h36V700h30v300"/>
+    <path d="M60 760v240M118 700v300M222 610v390M1240 620v380M1360 580v420M1470 700v300"/>
+  </g>
+  <!-- circuit traces with nodes -->
+  <g opacity=".06">
+    <path d="M260 120h180l40 40h220"/><circle cx="260" cy="120" r="4"/><circle cx="700" cy="160" r="4"/>
+    <path d="M300 200h120l30-30h140l26 26h90"/><circle cx="706" cy="196" r="3.5"/>
+    <path d="M1100 90h-160l-36 36H780"/><circle cx="1100" cy="90" r="4"/><circle cx="780" cy="126" r="3.5"/>
+    <path d="M1320 240v-70l40-40h140"/><circle cx="1500" cy="130" r="4"/><circle cx="1320" cy="240" r="3.5"/>
+    <path d="M140 420h90l30 30v90"/><circle cx="260" cy="540" r="3.5"/>
+  </g>
+  <!-- organic contour lines -->
+  <g opacity=".05">
+    <path d="M-20 300c180-60 300 40 470 10s250-130 420-90 260 120 430 80 220-90 320-60"/>
+    <path d="M-20 340c180-60 300 40 470 10s250-130 420-90 260 120 430 80 220-90 320-60"/>
+    <path d="M-20 380c180-60 300 40 470 10s250-130 420-90 260 120 430 80 220-90 320-60"/>
+  </g>
+</svg>

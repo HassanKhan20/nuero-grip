@@ -1,11 +1,11 @@
 // 3D robotic hand (Three.js). Driven by the 5 servo angles; its look changes per condition.
 import * as THREE from "three";
 
-const OLIVE = 0x1f6feb;        // accent blue (name kept for brevity)
-const OLIVE_BRIGHT = 0x4d8dff; // light accent blue
-const GOOD = 0x12a150;
-const RED = 0xdc3545;
-const AMBER = 0xd97706;
+const OLIVE = 0x6c7be8;        // accent blue (name kept for brevity)
+const OLIVE_BRIGHT = 0x8c9eff; // light accent blue
+const GOOD = 0x5fb3b3;
+const RED = 0xc24e42;
+const AMBER = 0xd99a5b;
 
 // index -> pinky, laid out across the top of the palm
 const FINGERS = [
@@ -51,7 +51,7 @@ export function createHand3D(container) {
   container.replaceChildren(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0xe4ebf4, 10, 22);
+  scene.fog = new THREE.Fog(0xebedf4, 10, 22);
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 60);
   // controlled camera: preset views + 45-degree steps, eased (no free orbit)
   const LOOK = new THREE.Vector3(0, 0.35, 0);
@@ -72,11 +72,11 @@ export function createHand3D(container) {
 
   // turntable: a soft shadow and two thin ellipse lines (no grid)
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(1.1, 64),
-    new THREE.MeshBasicMaterial({ color: 0xd3dce8, transparent: true, opacity: 0.7, depthWrite: false }));
+    new THREE.MeshBasicMaterial({ color: 0xd9dcef, transparent: true, opacity: 0.7, depthWrite: false }));
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = -2.1;
   scene.add(shadow);
-  const floorRings = [[2.3, 0xb6c4d8, 0.9], [2.38, 0x1f6feb, 0.18]].map(([r, color, opacity]) => {
+  const floorRings = [[2.3, 0xc3c7e3, 0.9], [2.38, 0x8c9eff, 0.3]].map(([r, color, opacity]) => {
     const ring = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.025, 96),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.NormalBlending, depthWrite: false, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2;
