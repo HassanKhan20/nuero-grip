@@ -22,7 +22,8 @@ const int PIN_LED_RED   = -1;                     // e.g. 6
 
 const int NUM_SERVOS = 5;
 const int APP_MAX = 160;          // the app sends 0..160
-const int SERVO_OUT_MAX[5] = {70, 180, 180, 180, 180};  // fully closed angle per finger (thumb only needs 70)
+const int SERVO_OUT_MAX[5] = {70, 180, 180, 180, 180};  // travel per finger (thumb only needs 70)
+const bool INVERT = true;  // flip direction: app "closed" -> servo 0, app "open" -> SERVO_OUT_MAX
 const unsigned long SAMPLE_MS = 20;        // 50 Hz to the laptop
 const unsigned long WATCHDOG_MS = 500;
 const unsigned long HEADBAND_STALE_MS = 300;
@@ -65,6 +66,7 @@ void setServos(const int *vals) {
   for (int i = 0; i < NUM_SERVOS; i++) {
     int v = constrain(vals[i], 0, APP_MAX);
     int deg = map(v, 0, APP_MAX, 0, SERVO_OUT_MAX[i]);
+    if (INVERT) deg = SERVO_OUT_MAX[i] - deg;
     if (deg != outDeg[i]) { outDeg[i] = deg; outChanged = true; }
     servos[i].write(deg);
   }
