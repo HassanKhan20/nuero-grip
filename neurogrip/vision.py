@@ -14,6 +14,8 @@ THUMB_OPEN_RATIO = 1.3    # thumb-tip-to-pinky-mcp / wrist-to-middle-mcp when op
 THUMB_RANGE = 0.7
 
 STALE_S = 0.5  # camera result older than this = no hand
+CAMERA_RETRY_S = 2.0  # wait before reopening a camera that failed or stopped sending frames
+NO_FRAME_S = 2.0  # no frame for this long = camera lost (unplugged, grabbed by another app, sleep)
 FINGERS = {"index": (5, 8), "middle": (9, 12), "ring": (13, 16), "pinky": (17, 20)}
 
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
@@ -128,10 +130,17 @@ class CameraVision:
             return self._result
 
     def _run(self) -> None:
-        try:
-            self._loop()
-        except Exception:
-            logging.getLogger(__name__).exception("camera vision thread crashed")
+        """Keep the camera alive: if it fails or stops sending frames, report it down and reopen it."""
+        log = logging.getLogger(__name__)
+        while not self._stop.is_set():
+            try:
+                self._loop()
+            except Exception:
+                log.exception("camera vision failed; retrying in %.0f s", CAMERA_RETRY_S)
+            if self._stop.is_set():
+                break
+            self.available = False
+            self._stop.wait(CAMERA_RETRY_S)
 
     def _loop(self) -> None:
         import cv2
@@ -143,20 +152,31 @@ class CameraVision:
             base_options=BaseOptions(model_asset_path=_model("hand_landmarker.task")),
             running_mode=mpv.RunningMode.VIDEO, num_hands=1))
         cap = cv2.VideoCapture(self.camera_index)
+        try:
+            self._capture(cv2, mp, hands, cap)
+        finally:
+            cap.release()
+            hands.close()
+
+    def _capture(self, cv2, mp, hands, cap) -> None:
         if not cap.isOpened():
-            self.available = False
-            logging.getLogger(__name__).error("camera %s could not be opened", self.camera_index)
-            return
-        t0 = time.monotonic()
-        frame_id = 0
+            raise RuntimeError(f"camera {self.camera_index} could not be opened (in use by another app?)")
+        t0 = last_ok = time.monotonic()
+        last_ts = -1
+        frame_id = getattr(self._result, "frame_id", 0) or 0
         while not self._stop.is_set():
             ok, frame = cap.read()
             if not ok:
+                if time.monotonic() - last_ok > NO_FRAME_S:
+                    raise RuntimeError(f"camera {self.camera_index} stopped sending frames")
                 time.sleep(0.05)
                 continue
+            last_ok = time.monotonic()
+            self.available = True
             frame = cv2.flip(frame, 1)  # mirror view: feels natural to the patient
             now = time.monotonic()
-            ts = int((now - t0) * 1000)
+            # MediaPipe VIDEO mode rejects repeated timestamps; buffered frames can arrive <1 ms apart
+            ts = last_ts = max(int((now - t0) * 1000), last_ts + 1)
             img = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             h = hands.detect_for_video(img, ts)
             curls = pinch = wrist = None
@@ -169,7 +189,6 @@ class CameraVision:
                 self._result = VisionResult(curls, pinch, wrist, frame_id, now)
                 self._result_at = now
                 self._jpeg = jpeg
-        cap.release()
 
     @staticmethod
     def _annotate(cv2, frame, hand) -> bytes:

@@ -67,3 +67,37 @@ def test_mock_vision_wrist_tremor_and_frames():
     assert r.wrist is not None and r.pinch is not None
     xs = [v.latest(t_ms=t).wrist[0] for t in range(0, 1000, 33)]
     assert max(xs) - min(xs) > 0.005
+
+
+def test_camera_thread_recovers_after_crash(monkeypatch):
+    import neurogrip.vision as v
+    monkeypatch.setattr(v, "CAMERA_RETRY_S", 0.01)
+    cam = v.CameraVision(0)
+    calls = []
+
+    def flaky_loop():
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("camera grabbed by another app")
+        cam._stop.set()
+
+    cam._loop = flaky_loop
+    cam._run()
+    assert len(calls) == 2  # restarted instead of dying silently
+
+
+def test_camera_reported_unavailable_while_down(monkeypatch):
+    import neurogrip.vision as v
+    monkeypatch.setattr(v, "CAMERA_RETRY_S", 0.01)
+    cam = v.CameraVision(0)
+    seen = []
+
+    def failing_loop():
+        if seen:
+            cam._stop.set()
+        seen.append(cam.available)
+        raise RuntimeError("no frames")
+
+    cam._loop = failing_loop
+    cam._run()
+    assert seen[0] is True and seen[1] is False
