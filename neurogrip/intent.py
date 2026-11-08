@@ -51,6 +51,7 @@ class IntentState:
     temple_drop: float
     forearm_drop: float
     artifact: bool = False  # reading jumped far beyond a clench (pad moved), so it was ignored
+    link_lost: bool = False  # sensor silent (headband off / out of range): the hand must open
 
 
 def _drop(baseline: float, value: float) -> float:
@@ -106,7 +107,7 @@ class IntentDetector:
             self._baseline, self.full, self._calib = None, None, []
         raw = (f.temple, f.forearm)
         if any(raw[i] <= 0 for i in self._idx):  # no signal (wireless headband silent)
-            return IntentState(self._baseline is not None, False, 0.0, 0.0, 0.0)
+            return IntentState(self._baseline is not None, False, 0.0, 0.0, 0.0, link_lost=True)
         if self._baseline is None:
             self._calib.append(raw)
             if len(self._calib) >= self.calib_frames:

@@ -16,6 +16,7 @@ THUMB_RANGE = 0.7
 STALE_S = 0.5  # camera result older than this = no hand
 CAMERA_RETRY_S = 2.0  # wait before reopening a camera that failed or stopped sending frames
 NO_FRAME_S = 2.0  # no frame for this long = camera lost (unplugged, grabbed by another app, sleep)
+CURL_SMOOTH = 0.5  # EMA weight of the newest frame: steadier robot fingers, ~1 frame of lag
 FINGERS = {"index": (5, 8), "middle": (9, 12), "ring": (13, 16), "pinky": (17, 20)}
 
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
@@ -47,6 +48,13 @@ class VisionResult:
     wrist: tuple[float, float] | None = None    # normalized image coords
     frame_id: int = 0                           # changes only when a new camera frame was processed
     t: float = 0.0                              # capture time, seconds
+
+
+def smooth_curls(prev: dict[str, float] | None, new: dict[str, float], alpha: float = CURL_SMOOTH) -> dict[str, float]:
+    """Blend the newest finger curls with the previous ones (no blending when the hand just appeared)."""
+    if not prev:
+        return new
+    return {k: round(alpha * v + (1 - alpha) * prev.get(k, v), 3) for k, v in new.items()}
 
 
 def pinch_distance(lm: list[tuple[float, float]]) -> float:
@@ -183,6 +191,7 @@ class CameraVision:
             if h.hand_landmarks:
                 lm = [(l.x, l.y) for l in h.hand_landmarks[0]]
                 curls, pinch, wrist = finger_curls(lm), pinch_distance(lm), lm[0]
+                curls = smooth_curls(self._result.curls, curls)
             frame_id += 1
             jpeg = self._annotate(cv2, frame, h.hand_landmarks[0] if h.hand_landmarks else None)
             with self._lock:

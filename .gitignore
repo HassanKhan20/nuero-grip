@@ -5,3 +5,7 @@ __pycache__/
 .superpowers/
 models/
 .ng_secret
+
+# local app logs
+_*.log
+_*.err

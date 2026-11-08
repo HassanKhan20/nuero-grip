@@ -313,4 +313,6 @@ def make_engine() -> Engine:
     else:
         engine = Engine(SerialSource(os.environ["NG_SERIAL_PORT"]), CameraVision(camera), store, kind="hardware")
     engine.set_control(os.environ.get("NG_CONTROL", default_control(kind)), os.environ.get("NG_GRIP", "fist"))
+    if os.environ.get("NG_LEVEL"):  # starting difficulty 1-5 (1 = lowest trigger)
+        engine.set_difficulty(int(os.environ["NG_LEVEL"]))
     return engine

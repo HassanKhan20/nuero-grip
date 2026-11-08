@@ -15,6 +15,7 @@ THRESHOLDS = [0.08, 0.11, 0.14, 0.17, 0.20]  # intent threshold per difficulty l
 CONTROL_MODES = ["mirror", "intent"]
 GRIPS = ["fist", "pinch", "point", "wave"]
 MAX_STEP_DEG = 6  # per 20 ms frame in intent mode: about 0.55 s from open to closed
+MIRROR_DEADBAND_DEG = 3  # mirror mode ignores tiny camera jitter so the servos don't buzz
 
 
 def _clamp01(v: float) -> float:
@@ -56,8 +57,12 @@ class Gate:
         curls = vision.curls
         target_set = curls is not None  # an open healthy hand is a valid target: it releases the grip
         is_open = intent.active and target_set
-        if is_open:
-            self.angles = tuple(round(curls[k] * SERVO_MAX) for k in FINGERS)
+        if intent.link_lost:  # headband gone: never leave the hand clamped on a held pose
+            self.angles = (0,) * len(FINGERS)
+        elif is_open:
+            target = tuple(round(curls[k] * SERVO_MAX) for k in FINGERS)
+            self.angles = tuple(t if abs(t - a) > MIRROR_DEADBAND_DEG or t in (0, SERVO_MAX) else a
+                                for a, t in zip(self.angles, target))
         return GateOutput(is_open, target_set, self.angles, "G" if is_open else "O", buzzer)
 
     def _step_intent(self, intent: IntentState, buzzer: int) -> GateOutput:

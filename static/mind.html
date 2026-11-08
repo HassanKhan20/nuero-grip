@@ -91,6 +91,17 @@
   .grips button { padding: 7px 10px; font-size: 12px; }
   .grips button.on { border-color: var(--intent); color: var(--intent); }
   .small { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  .cam { position: relative; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; background: rgb(0 0 0 / .35); }
+  .cam img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cam .cam-off { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 16px;
+                  color: var(--muted); font-size: 13px; }
+  .cam .cam-tag { position: absolute; left: 10px; top: 10px; padding: 4px 9px; border-radius: 999px; font-size: 11px;
+                  background: rgb(8 10 22 / .7); border: 1px solid var(--line); }
+  .cam.copying { box-shadow: 0 0 0 2px var(--live), 0 0 24px var(--glow); }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 12px; }
+  .modes button { padding: 9px 10px; font-size: 13px; }
+  .modes button.on, .grips button.on { border-color: var(--intent); color: var(--intent); background: rgb(140 158 255 / .1); }
+  .grips[hidden] { display: none; }
   kbd { font: 11px Inter; padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; }
 
   .overlay { position: fixed; inset: 0; z-index: 5; display: grid; place-content: center; text-align: center;
@@ -125,6 +136,7 @@
   <div class="chips">
     <span class="chip" id="chip-conn"><i></i><span>Connecting</span></span>
     <span class="chip" id="chip-signal"><i></i><span>Headband</span></span>
+    <span class="chip" id="chip-cam"><i></i><span>Camera</span></span>
     <span class="chip" id="chip-cal"><i></i><span>Not calibrated</span></span>
   </div>
   <a class="back" href="/">Dashboard →</a>
@@ -154,6 +166,18 @@
   </section>
 
   <aside>
+    <div class="card">
+      <h2>Your healthy hand · camera</h2>
+      <div class="cam" id="cam">
+        <img id="cam-img" alt="Live camera with hand tracking" hidden>
+        <div class="cam-off" id="cam-off">Starting camera…</div>
+        <span class="cam-tag" id="cam-tag" hidden></span>
+      </div>
+      <div class="modes" role="group" aria-label="How the robot hand moves">
+        <button type="button" data-mode="mirror" title="Robot copies each finger of your hand while you clench">Mirror my hand <kbd>M</kbd></button>
+        <button type="button" data-mode="intent" title="Clench alone closes the robot hand in a grip shape">Clench → grip <kbd>G</kbd></button>
+      </div>
+    </div>
     <div class="card">
       <h2>Robotic hand response</h2>
       <div class="fingers" id="fingers"></div>
@@ -209,6 +233,7 @@ function render(s) {
   last = s;
   const strength = Math.max(0, Math.min(1, s.intent_strength || 0));
   const touch = s.touch || {};
+  const mirror = s.control_mode === "mirror";
   const signal = s.sensors_ok && (s.source_kind !== "hardware" || (touch.temple || 0) > 0);
   const active = signal && s.intent_active;
   samples.push([performance.now(), signal ? strength : 0, active]);
@@ -220,9 +245,12 @@ function render(s) {
   let state, hint;
   if (!signal) { state = "No signal"; hint = s.source_kind === "hardware" ? "Headband is silent. Check its power bank." : "Waiting for sensor data"; }
   else if (!s.calibrated) { state = "Reading baseline"; hint = "Stay relaxed for a moment"; }
-  else if (active) { state = s.gate_open ? "Hand moving" : "Intent detected"; hint = "Your effort is driving the hand"; }
+  else if (active) {
+    state = s.gate_open ? "Hand moving" : "Intent detected";
+    hint = mirror ? (s.curls ? "The robot is copying your hand" : "Show your hand to the camera") : "Your effort is driving the hand";
+  }
   else if (strength > 0.25) { state = "Building"; hint = "Almost there — a little harder"; }
-  else { state = "Relaxed"; hint = s.source_kind === "hardware" ? "Clench your jaw to move the hand" : "Hold Space (or click Calibrate) to try"; }
+  else { state = "Relaxed"; hint = s.source_kind !== "hardware" ? "Hold Space to try" : mirror ? "Clench to let the robot copy your hand" : "Clench your jaw to move the hand"; }
   $("state").textContent = state; $("hint").textContent = hint;
 
   if (active && !wasActive && navigator.vibrate) navigator.vibrate(30);
@@ -231,8 +259,14 @@ function render(s) {
   const angles = s.angles || [0, 0, 0, 0, 0];
   document.querySelectorAll(".finger .fill").forEach((el, i) => (el.style.height = Math.round((angles[i] || 0) / 160 * 100) + "%"));
   const closed = angles.reduce((a, b) => a + b, 0) / (160 * 5);
-  $("hand-state").innerHTML = `Hand: <b>${closed > 0.6 ? "closed" : closed > 0.1 ? "closing" : "open"}</b> · control: <b>${s.control_mode === "intent" ? "intent only" : "mirror camera"}</b>`;
-  document.querySelectorAll("[data-grip]").forEach((b) => b.classList.toggle("on", b.dataset.grip === s.grip && s.control_mode === "intent"));
+  const pose = closed > 0.6 ? "closed" : closed > 0.1 ? "partly closed" : "open";
+  $("hand-state").innerHTML = mirror
+    ? `Hand: <b>${pose}</b> · ${active && s.curls ? "<b>copying you</b>" : "holding: clench to copy"}`
+    : `Hand: <b>${pose}</b> · clench closes a <b>${s.grip}</b>`;
+  document.querySelectorAll("[data-grip]").forEach((b) => b.classList.toggle("on", b.dataset.grip === s.grip && !mirror));
+  document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === s.control_mode));
+  $("grips").hidden = mirror;
+  renderCam(s, active);
 
   $("reps").textContent = s.reps ?? 0;
   $("act").textContent = Math.round(s.activation_rate || 0) + "%";
@@ -241,6 +275,8 @@ function render(s) {
 
   chip("chip-signal", signal ? "ok" : "bad", s.source_kind === "hardware" ? (signal ? "Headband live" : "Headband silent") :
        s.source_kind === "camera" ? "Camera mode (Space = intent)" : "Simulated");
+  chip("chip-cam", !s.camera_ok ? "bad" : s.curls ? "ok" : "wait",
+       !s.camera_ok ? "Camera off" : s.curls ? "Hand tracked" : "No hand in view");
   chip("chip-cal", s.range_calibrated ? "ok" : "wait", s.range_calibrated ? "Calibrated to you" : "Not calibrated");
 
   const ov = $("overlay");
@@ -254,9 +290,29 @@ function render(s) {
   } else ov.hidden = true;
 
   const banner = $("banner");
-  if (s.source_kind === "hardware" && !signal) { banner.hidden = false; banner.textContent = "Headband signal lost: the hand stays open for safety until it comes back."; }
+  if (s.source_kind === "hardware" && !signal) { banner.hidden = false; banner.textContent = "Headband signal lost: the robot hand opens for safety until it comes back."; }
   else banner.hidden = true;
 }
+
+// live camera (MJPEG). Reconnects by itself if the camera drops or the server restarts.
+let camLive = false, camRetry = null;
+function startCam() {
+  clearTimeout(camRetry); camRetry = null;
+  const img = $("cam-img");
+  img.onload = () => { camLive = true; img.hidden = false; $("cam-off").hidden = true; };
+  img.onerror = () => { camLive = false; img.hidden = true; $("cam-off").hidden = false; camRetry = setTimeout(startCam, 3000); };
+  img.src = "/video_feed?t=" + Date.now();
+}
+function renderCam(s, active) {
+  const off = $("cam-off"), tag = $("cam-tag");
+  if (!s.camera_ok) { off.textContent = "Camera not available. Close other apps using the webcam (Zoom, Teams, Camera)."; }
+  else if (!camLive && !camRetry) startCam();
+  else off.textContent = "Starting camera…";
+  tag.hidden = !s.camera_ok;
+  tag.textContent = !s.curls ? "Hold your hand up, palm to the camera" : s.control_mode === "mirror" ? (active ? "● Robot copying" : "Clench to copy") : "Tracking";
+  $("cam").classList.toggle("copying", s.control_mode === "mirror" && !!active && !!s.curls);
+}
+startCam();
 
 function drawWave() {
   const c = $("wave"), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
@@ -308,6 +364,16 @@ document.addEventListener("keyup", (e) => { if (e.code === "Space") hold(false);
 window.addEventListener("blur", () => hold(false));
 document.querySelectorAll("[data-grip]").forEach((b) => b.addEventListener("click", () =>
   api("/api/control", { mode: "intent", grip: b.dataset.grip }).catch((err) => toast(err.message))));
+function setMode(mode) {
+  api("/api/control", { mode }).then(() => toast(mode === "mirror" ? "Mirror: clench and the robot copies your hand" : "Grip: clench closes the robot hand"))
+    .catch((err) => toast(err.message));
+}
+document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+document.addEventListener("keydown", (e) => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "m" || e.key === "M") setMode("mirror");
+  if (e.key === "g" || e.key === "G") setMode("intent");
+});
 
 fetch("/api/state").then((r) => (r.ok ? r.json() : null)).then((s) => s && render(s)).catch(() => {});
 </script>
