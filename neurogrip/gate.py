@@ -15,6 +15,7 @@ THRESHOLDS = [0.08, 0.11, 0.14, 0.17, 0.20]  # intent threshold per difficulty l
 CONTROL_MODES = ["mirror", "intent"]
 GRIPS = ["fist", "pinch", "point", "wave"]
 MAX_STEP_DEG = 6  # per 20 ms frame in intent mode: about 0.55 s from open to closed
+FULL_CLOSE_STRENGTH = 0.75  # intent mode: fully closed at 75% focus (0.5 = trigger), not only at max effort
 MIRROR_DEADBAND_DEG = 3  # mirror mode ignores tiny camera jitter so the servos don't buzz
 
 
@@ -66,8 +67,8 @@ class Gate:
         return GateOutput(is_open, target_set, self.angles, "G" if is_open else "O", buzzer)
 
     def _step_intent(self, intent: IntentState, buzzer: int) -> GateOutput:
-        # closure starts at the threshold (strength 0.5) and is full at twice the threshold
-        closure = _clamp01((intent.strength - 0.5) * 2) if intent.active else 0.0
+        # closure starts at the trigger (strength 0.5) and is full at FULL_CLOSE_STRENGTH
+        closure = _clamp01((intent.strength - 0.5) / (FULL_CLOSE_STRENGTH - 0.5)) if intent.active else 0.0
         target = tuple(round(t * SERVO_MAX) for t in grip_targets(self.grip, closure))
         self.angles = tuple(a + max(-MAX_STEP_DEG, min(MAX_STEP_DEG, t - a)) for a, t in zip(self.angles, target))
         drive = max(self.angles) / SERVO_MAX

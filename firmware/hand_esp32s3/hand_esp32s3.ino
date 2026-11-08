@@ -15,14 +15,14 @@
 #include <ESP32Servo.h>
 
 // ---- pins (from the team's servo test sketch) ----
-const int SERVO_PINS[5] = {13, 12, 11, 10, 9};  // thumb, index, middle, ring, pinky
+const int SERVO_PINS[5] = {13, 9, 11, 10, 12};  // thumb, index, middle, ring, pinky
 const int PIN_BUZZER    = -1;                     // set a GPIO to enable, e.g. 4
 const int PIN_LED_GREEN = -1;                     // e.g. 5
 const int PIN_LED_RED   = -1;                     // e.g. 6
 
 const int NUM_SERVOS = 5;
 const int APP_MAX = 160;          // the app sends 0..160
-const int SERVO_OUT_MAX = 180;    // this hand closes fully at 180 (from the test sketch)
+const int SERVO_OUT_MAX[5] = {70, 180, 180, 180, 180};  // fully closed angle per finger (thumb only needs 70)
 const unsigned long SAMPLE_MS = 20;        // 50 Hz to the laptop
 const unsigned long WATCHDOG_MS = 500;
 const unsigned long HEADBAND_STALE_MS = 300;
@@ -38,6 +38,10 @@ struct __attribute__((packed)) PadPacket {
 };
 
 Servo servos[NUM_SERVOS];
+const char FINGER_TAG[NUM_SERVOS] = {'T', 'I', 'M', 'R', 'P'};
+int outDeg[NUM_SERVOS] = {0, 0, 0, 0, 0};   // last angle written to each servo
+bool outChanged = true;
+unsigned long lastReport = 0;
 volatile uint16_t rxTemple = 0, rxForearm = 0;
 volatile unsigned long rxAt = 0;
 volatile uint32_t rxCount = 0;
@@ -60,7 +64,9 @@ void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
 void setServos(const int *vals) {
   for (int i = 0; i < NUM_SERVOS; i++) {
     int v = constrain(vals[i], 0, APP_MAX);
-    servos[i].write(map(v, 0, APP_MAX, 0, SERVO_OUT_MAX));
+    int deg = map(v, 0, APP_MAX, 0, SERVO_OUT_MAX[i]);
+    if (deg != outDeg[i]) { outDeg[i] = deg; outChanged = true; }
+    servos[i].write(deg);
   }
 }
 
@@ -111,7 +117,7 @@ void setup() {
 
   for (int i = 0; i < NUM_SERVOS; i++) {
     servos[i].setPeriodHertz(50);
-    servos[i].attach(SERVO_PINS[i], 500, 2400);
+    servos[i].attach(SERVO_PINS[i]);  // library default pulse range, same as the team's servo test sketch
   }
   openHand();
 
@@ -119,7 +125,7 @@ void setup() {
   WiFi.disconnect();
   esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
   bool ok = esp_now_init() == ESP_OK && esp_now_register_recv_cb(onRecv) == ESP_OK;
-  Serial.printf("# NeuroGrip hand firmware | ESP32-S3 | servos 13,12,11,10,9 | ESP-NOW %s ch%d | waiting for headband\n",
+  Serial.printf("# NeuroGrip hand firmware | ESP32-S3 | servos T13 I9 M11 R10 P12 | ESP-NOW %s ch%d | waiting for headband\n",
                 ok ? "ready" : "FAILED", ESPNOW_CHANNEL);
 }
 
@@ -137,6 +143,14 @@ void loop() {
   if (fresh != linkUp) {
     linkUp = fresh;
     Serial.printf("# headband link %s (%lu packets)\n", linkUp ? "UP" : "LOST", (unsigned long)rxCount);
+  }
+
+  if (outChanged && now - lastReport >= 250) {  // "# servo ..." lines are ignored by the app
+    outChanged = false;
+    lastReport = now;
+    Serial.printf("# servo");
+    for (int i = 0; i < NUM_SERVOS; i++) Serial.printf(" %c%d=%d", FINGER_TAG[i], SERVO_PINS[i], outDeg[i]);
+    Serial.println();
   }
 
   if (now - lastSample >= SAMPLE_MS) {

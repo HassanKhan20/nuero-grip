@@ -117,6 +117,8 @@
   .banner { margin: 0 28px 12px; padding: 12px 16px; border-radius: 12px; background: rgb(239 122 108 / .12);
             border: 1px solid rgb(239 122 108 / .35); color: #ffd3cc; position: relative; z-index: 1; }
   .banner[hidden] { display: none; }
+  .banner.info { background: rgb(140 158 255 / .12); border-color: rgb(140 158 255 / .4); color: var(--ink); }
+  .banner.info button { margin-left: 10px; padding: 6px 12px; font-size: 13px; }
   @media (prefers-reduced-motion: reduce) { .active .pulse { animation: none; } .meter, .fill { transition: none; } }
 </style>
 </head>
@@ -290,8 +292,16 @@ function render(s) {
   } else ov.hidden = true;
 
   const banner = $("banner");
-  if (s.source_kind === "hardware" && !signal) { banner.hidden = false; banner.textContent = "Headband signal lost: the robot hand opens for safety until it comes back."; }
-  else banner.hidden = true;
+  if (s.source_kind === "hardware" && !signal) {
+    banner.hidden = false; banner.className = "banner";
+    banner.textContent = "Headband signal lost: the robot hand opens for safety until it comes back.";
+  } else if (s.source_kind === "hardware" && !s.range_calibrated && !s.calibration_phase) {
+    banner.hidden = false; banner.className = "banner info";
+    if (!banner.querySelector("button")) {
+      banner.innerHTML = "<b>Not calibrated to you yet</b>: the trigger is generic and a small focus won't reach it. Press <kbd>C</kbd>, relax, then focus hard for 3 s.<button type='button'>Calibrate now</button>";
+      banner.querySelector("button").addEventListener("click", calibrate);
+    }
+  } else banner.hidden = true;
 }
 
 // live camera (MJPEG). Reconnects by itself if the camera drops or the server restarts.

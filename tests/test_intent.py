@@ -172,8 +172,9 @@ def test_rezero_takes_new_relaxed_baseline():
         assert not s.active  # re-reading the relaxed level
     s = d.update(SensorFrame(50, 650, 400, 0, 0, 1000))
     assert s.calibrated and not s.active and s.strength == 0.0
-    assert not d.range_calibrated  # old full-effort range no longer applies
-    assert d.update(SensorFrame(51, 540, 400, 0, 0, 1000)).active  # a real clench from the new zero
+    assert d.range_calibrated  # the person's range is relative, so it is kept across a re-zero
+    states = [d.update(SensorFrame(51 + i, 330, 400, 0, 0, 1000)) for i in range(4)]
+    assert states[-1].active  # full effort from the new zero
 
 
 
