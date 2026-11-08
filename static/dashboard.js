@@ -162,10 +162,8 @@ function applyCondition(mode) {
     return item;
   }));
   setText("watermark", c.mark);
-  const hasTest = role === "therapist" && !!c.test;
   if ($("test-tap")) $("test-tap").hidden = c.test !== "tap";
   if ($("test-reaction")) $("test-reaction").hidden = c.test !== "reaction";
-  $("cam-card").hidden = hasTest; // one context card: the condition's test, otherwise the camera
 }
 
 // ---------- finger callouts + leader lines ----------

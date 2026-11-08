@@ -130,25 +130,16 @@
       <p id="hw-intent" class="hint" hidden>Headband connected</p>
     </article>
 
-    {% if role == 'therapist' %}
-    <article class="card card-review">
-      <header class="card-head"><h2>Session overview</h2><span class="tag">NVIDIA Nemotron</span></header>
-      <p id="agent-status" class="sub">Reviews the session, sets the next difficulty and writes a report.</p>
-      <p id="agent-preview" class="preview" hidden></p>
-      <div class="btn-row">
-        <button type="button" id="btn-agent" class="btn primary">Review session</button>
-        <button type="button" id="btn-end" class="btn ghost">End session</button>
-        <button type="button" id="btn-report" class="btn link" hidden>Open report</button>
+  </section>
+
+  <aside class="side">
+    <article id="cam-card" class="card cam-card">
+      <header class="card-head"><h2>Camera</h2><span class="tag" id="cam-tag">Off</span></header>
+      <div class="cam-box" id="cam-box" title="Show large">
+        <img id="cam" alt="Camera view of the healthy hand" hidden>
+        <p id="cam-msg" class="cam-msg">No camera</p>
       </div>
     </article>
-    {% else %}
-    <article class="card card-review">
-      <header class="card-head"><h2>Your progress</h2><span class="tag">Gemini</span></header>
-      <p id="explain-status" class="sub"></p>
-      <p id="explain-text" class="preview" hidden></p>
-      <button type="button" id="btn-explain" class="btn primary">Explain my progress</button>
-    </article>
-    {% endif %}
 
     {% if role == 'therapist' %}
     <article id="test-tap" class="card" hidden>
@@ -175,14 +166,26 @@
     </article>
     {% endif %}
 
-    <article id="cam-card" class="card cam-card">
-      <header class="card-head"><h2>Camera</h2><span class="tag" id="cam-tag">Off</span></header>
-      <div class="cam-box" id="cam-box" title="Show large">
-        <img id="cam" alt="Camera view of the healthy hand" hidden>
-        <p id="cam-msg" class="cam-msg">No camera</p>
+    {% if role == 'therapist' %}
+    <article class="card card-review">
+      <header class="card-head"><h2>Session overview</h2><span class="tag">NVIDIA Nemotron</span></header>
+      <p id="agent-status" class="sub">Reviews the session, sets the next difficulty and writes a report.</p>
+      <p id="agent-preview" class="preview" hidden></p>
+      <div class="btn-row">
+        <button type="button" id="btn-agent" class="btn primary">Review session</button>
+        <button type="button" id="btn-end" class="btn ghost">End session</button>
+        <button type="button" id="btn-report" class="btn link" hidden>Open report</button>
       </div>
     </article>
-  </section>
+    {% else %}
+    <article class="card card-review">
+      <header class="card-head"><h2>Your progress</h2><span class="tag">Gemini</span></header>
+      <p id="explain-status" class="sub"></p>
+      <p id="explain-text" class="preview" hidden></p>
+      <button type="button" id="btn-explain" class="btn primary">Explain my progress</button>
+    </article>
+    {% endif %}
+  </aside>
 </main>
 </div>
 
