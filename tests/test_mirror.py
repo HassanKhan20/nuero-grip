@@ -116,3 +116,15 @@ def test_engine_smooths_pad_jitter_and_passes_link_loss():
     assert vals[-1] == 1178.0
     assert e._smooth(Frame(9, 0, 0, 0, 0, 1000)).temple == 0
     assert e._smooth(Frame(10, 1190, 1900, 0, 0, 1000)).temple == 1190.0  # window restarted after the dropout
+
+
+def test_held_opposite_change_does_not_fire_on_release():
+    """Reading moves the 'wrong' way for 3 s, then returns: the baseline must not sink far enough to trigger."""
+    from neurogrip.intent import IntentDetector, SiteRange
+    d = IntentDetector(calib_frames=1, sites=("temple",))
+    d.fraction = 0.2  # level 1
+    d.set_calibration((1000.0, 1000.0), SiteRange((0.01, 0.01), (-1, -1)))  # effort = reading rises 1%
+    for i in range(150):
+        d.update(Frame(i, 990, 1000, 0, 0, 1000))  # held 1% fall (opposite) for 3 s
+    states = [d.update(Frame(200 + i, 1000, 1000, 0, 0, 1000)) for i in range(10)]  # let go
+    assert not any(s.active for s in states)

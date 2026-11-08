@@ -27,6 +27,8 @@ ARTIFACT_RATIO = 2.5    # a change > 2.5x this person's full focus isn't real fo
 ARTIFACT_REZERO = 100   # ~2 s of continuous artifact = new resting level (headband re-seated): re-zero to it
 DEBOUNCE_FRAMES = 4     # ~80 ms over the threshold before the hand moves (ignores one-frame blips)
 DRIFT_ALPHA = 0.004     # while clearly relaxed, the baseline follows slow drift (~5 s time constant at 50 Hz)
+OPPOSITE_DRIFT_ALPHA = 0.0008  # moves AGAINST the effort direction are followed 5x slower (~25 s), so a
+                               # held effort the detector mislabels can't drag the baseline and fire on release
 
 
 class SiteRange(tuple):
@@ -167,6 +169,7 @@ class IntentDetector:
         # 0.5 exactly at the threshold, 1.0 at this person's full effort
         strength = 0.5 * n / fr if n < fr else 0.5 + 0.5 * min(1.0, (n - fr) / (1 - fr))
         if n < fr * 0.5:  # clearly relaxed: let the baseline follow slow drift
-            self._baseline = tuple(base[i] + DRIFT_ALPHA * (raw[i] - base[i]) if i in self._idx else base[i]
+            alpha = [OPPOSITE_DRIFT_ALPHA if signed[i] < -fr * 0.5 * self.full[i] else DRIFT_ALPHA for i in (0, 1)]
+            self._baseline = tuple(base[i] + alpha[i] * (raw[i] - base[i]) if i in self._idx else base[i]
                                    for i in (0, 1))
         return IntentState(True, active, round(max(0.0, min(1.0, strength)), 3), round(t, 3), round(fa, 3))
