@@ -38,6 +38,10 @@ struct __attribute__((packed)) PadPacket {
 };
 
 Servo servos[NUM_SERVOS];
+const char FINGER_TAG[NUM_SERVOS] = {'T', 'I', 'M', 'R', 'P'};
+int outDeg[NUM_SERVOS] = {0, 0, 0, 0, 0};   // last angle written to each servo
+bool outChanged = true;
+unsigned long lastReport = 0;
 volatile uint16_t rxTemple = 0, rxForearm = 0;
 volatile unsigned long rxAt = 0;
 volatile uint32_t rxCount = 0;
@@ -60,7 +64,9 @@ void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
 void setServos(const int *vals) {
   for (int i = 0; i < NUM_SERVOS; i++) {
     int v = constrain(vals[i], 0, APP_MAX);
-    servos[i].write(map(v, 0, APP_MAX, 0, SERVO_OUT_MAX[i]));
+    int deg = map(v, 0, APP_MAX, 0, SERVO_OUT_MAX[i]);
+    if (deg != outDeg[i]) { outDeg[i] = deg; outChanged = true; }
+    servos[i].write(deg);
   }
 }
 
@@ -111,7 +117,7 @@ void setup() {
 
   for (int i = 0; i < NUM_SERVOS; i++) {
     servos[i].setPeriodHertz(50);
-    servos[i].attach(SERVO_PINS[i], 500, 2400);
+    servos[i].attach(SERVO_PINS[i]);  // library default pulse range, same as the team's servo test sketch
   }
   openHand();
 
@@ -137,6 +143,14 @@ void loop() {
   if (fresh != linkUp) {
     linkUp = fresh;
     Serial.printf("# headband link %s (%lu packets)\n", linkUp ? "UP" : "LOST", (unsigned long)rxCount);
+  }
+
+  if (outChanged && now - lastReport >= 250) {  // "# servo ..." lines are ignored by the app
+    outChanged = false;
+    lastReport = now;
+    Serial.printf("# servo");
+    for (int i = 0; i < NUM_SERVOS; i++) Serial.printf(" %c%d=%d", FINGER_TAG[i], SERVO_PINS[i], outDeg[i]);
+    Serial.println();
   }
 
   if (now - lastSample >= SAMPLE_MS) {
