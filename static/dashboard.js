@@ -1,5 +1,6 @@
 import { createHand } from "./hand.js";
 import { createTour } from "./onboarding.js";
+import { initCommandCenter, initSurge } from "./command.js";
 
 const $ = (id) => document.getElementById(id);
 const role = document.body.dataset.role;
@@ -139,7 +140,7 @@ const dockButtons = document.querySelectorAll(".icon-btn[data-sheet]");
 function openSheet(id) {
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
   dockButtons.forEach((b) => b.classList.toggle("on", b.dataset.sheet === id));
-  if (id) $(id)?.showModal();
+  if (id && $(id)) { $(id).showModal(); $(id).dispatchEvent(new Event("open-sheet")); }
 }
 document.querySelectorAll("[data-sheet]").forEach((b) => b.addEventListener("click", () => openSheet(b.dataset.sheet)));
 document.querySelectorAll("dialog").forEach((d) => {
@@ -617,8 +618,9 @@ if (role === "therapist") {
     }));
     $("triage-table").hidden = false;
     setText("caseload-meta", `Ranked ${new Date().toLocaleString([], { dateStyle: "medium", timeStyle: "short" })} by NVIDIA Nemotron`);
-    $("btn-caseload-pdf").hidden = false;
   });
+  initCommandCenter({ api, toast, socket });
+  initSurge({ api, toast });
 } else {
   $("btn-explain").onclick = () => busy($("btn-explain"), "explain-status", async () => {
     const r = await api("/api/patient_view");

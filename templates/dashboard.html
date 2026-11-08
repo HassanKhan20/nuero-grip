@@ -27,6 +27,7 @@
   <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l3 2M10 3h4"/></symbol>
   <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".8"/></symbol>
   <symbol id="i-tap" viewBox="0 0 24 24"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 10.5V9a1.5 1.5 0 0 1 3 0v2M15 10.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4 15.5a1.5 1.5 0 0 1 2.4-1.8L9 16"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></symbol>
   <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-2h5"/></symbol>
 </svg>
 
@@ -40,7 +41,8 @@
   </nav>
   <div class="nav-right">
     <span class="status"><span id="conn-dot" class="dot"></span><span id="source-label">Connecting</span></span>
-    {% if role == 'therapist' %}<button type="button" class="icon-btn" data-sheet="sheet-caseload" aria-label="Caseload" title="Caseload"><svg><use href="#i-people"/></svg></button>{% endif %}
+    {% if role == 'therapist' %}<button type="button" class="icon-btn" data-sheet="sheet-command" aria-label="Command center" title="Command center: incidents and audit log"><svg><use href="#i-shield"/></svg><span id="inc-badge" class="badge" hidden></span></button>
+    <button type="button" class="icon-btn" data-sheet="sheet-caseload" aria-label="Triage" title="Triage: regional surge and caseload"><svg><use href="#i-people"/></svg></button>{% endif %}
     <button type="button" class="icon-btn" data-sheet="sheet-activity" aria-label="Activity" title="Activity"><svg><use href="#i-list"/></svg><span id="attn-badge" class="badge" hidden></span></button>
     <button type="button" class="icon-btn" data-sheet="sheet-sensors" aria-label="Sensors and calibration" title="Sensors and calibration"><svg><use href="#i-sliders"/></svg></button>
     <button type="button" id="btn-tour" class="icon-btn" aria-label="Show tour" title="Show tour"><svg><use href="#i-help"/></svg></button>
@@ -229,19 +231,72 @@
   </article>
 </dialog>
 
+<dialog id="sheet-command" class="sheet wide command">
+  <header class="card-head"><div><h2>Command center</h2><p class="sub">Live detections, incidents and the audit trail. Therapists only.</p></div>
+    <div class="btn-row no-print"><button type="button" class="btn ghost" data-print="incident log">Export PDF</button><button type="button" class="close" aria-label="Close">×</button></div>
+  </header>
+  <div id="cc-kpis" class="kpis"></div>
+  <div class="row-between no-print">
+    <div class="seg" id="cc-tabs"><button type="button" data-cc="incidents" class="on">Incidents</button><button type="button" data-cc="audit">Audit log</button></div>
+    <div class="seg" id="cc-filter"><button type="button" data-status="active" class="on">Active</button><button type="button" data-status="resolved">Resolved</button><button type="button" data-status="all">All</button></div>
+  </div>
+  <div id="cc-incidents" class="cc-grid">
+    <div class="cc-left">
+      <button type="button" id="cc-declare-btn" class="btn ghost no-print">Declare incident</button>
+      <form id="cc-declare" class="cc-form no-print" hidden>
+        <input name="title" placeholder="What happened?" maxlength="120" required>
+        <div class="btn-row">
+          <select name="severity"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option><option value="critical">Critical</option></select>
+          <select name="category"><option value="clinical">Clinical</option><option value="device">Device</option><option value="security">Security</option><option value="caseload">Caseload</option></select>
+        </div>
+        <textarea name="detail" rows="2" placeholder="Details (optional)" maxlength="500"></textarea>
+        <div class="btn-row"><button type="submit" class="btn primary">Open incident</button><button type="button" id="cc-declare-cancel" class="btn link">Cancel</button></div>
+      </form>
+      <ul id="cc-list" class="cc-list"></ul>
+    </div>
+    <section id="cc-detail" class="cc-detail"><p class="sub">Select an incident.</p></section>
+  </div>
+  <div id="cc-audit" hidden>
+    <div class="table-scroll"><table id="cc-audit-table" class="triage">
+      <thead><tr><th>Time</th><th>Who</th><th>Action</th><th>Detail</th><th>Address</th></tr></thead><tbody></tbody>
+    </table></div>
+  </div>
+</dialog>
+
 <dialog id="sheet-caseload" class="sheet wide">
-  <header class="card-head"><h2>Caseload</h2>
-    <div class="btn-row no-print"><button type="button" id="btn-caseload-pdf" class="btn ghost" data-print="caseload" hidden>Export PDF</button><button type="button" class="close" aria-label="Close">×</button></div>
+  <header class="card-head"><div><h2>Triage</h2><p id="tri-sub" class="sub">Every patient scored, the most at-risk get a therapist first, nobody is dropped.</p></div>
+    <div class="btn-row no-print"><button type="button" class="btn ghost" data-print="triage">Export PDF</button><button type="button" class="close" aria-label="Close">×</button></div>
   </header>
   <p id="caseload-meta" class="sub print-only"></p>
-  <p id="triage-status" class="sub"></p>
-  <div class="table-scroll">
-    <table id="triage-table" class="triage" hidden>
-      <thead><tr><th>Priority</th><th>Patient</th><th>Condition</th><th>Trend</th><th>Last seen</th><th>Reason</th></tr></thead>
-      <tbody></tbody>
-    </table>
+  <div class="seg no-print" id="tri-tabs"><button type="button" data-tri="surge" class="on">Regional surge</button><button type="button" data-tri="clinic">My caseload</button></div>
+
+  <div id="tri-surge" class="tri-pane">
+    <div id="surge-kpis" class="kpis"></div>
+    <div class="surge-cols">
+      <section><h3>Urgent patients by region</h3><div id="surge-regions" class="bars"></div></section>
+      <section><h3>Therapist load</h3><div id="surge-load" class="bars"></div></section>
+    </div>
+    <div id="surge-brief-box" class="brief" hidden><h3>Coordination brief · NVIDIA Nemotron</h3><p id="surge-brief"></p></div>
+    <div class="row-between">
+      <div class="seg no-print" id="surge-filter"><button type="button" data-urg="urgent" class="on">Urgent</button><button type="button" data-urg="monitor">Monitor</button><button type="button" data-urg="stable">Stable</button><button type="button" data-urg="">All</button></div>
+      <div class="btn-row no-print"><span id="surge-status" class="sub"></span><button type="button" id="btn-brief" class="btn primary">Coordination brief</button></div>
+    </div>
+    <div class="table-scroll"><table id="surge-table" class="triage">
+      <thead><tr><th>Priority</th><th>Risk</th><th>Patient</th><th>Region</th><th>Condition</th><th>Why</th><th>Care</th></tr></thead><tbody></tbody>
+    </table></div>
+    <p id="surge-more" class="sub"></p>
   </div>
-  <button type="button" id="btn-triage" class="btn primary no-print">Rank patients</button>
+
+  <div id="tri-clinic" class="tri-pane" hidden>
+    <p id="triage-status" class="sub"></p>
+    <div class="table-scroll">
+      <table id="triage-table" class="triage" hidden>
+        <thead><tr><th>Priority</th><th>Patient</th><th>Condition</th><th>Trend</th><th>Last seen</th><th>Reason</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <button type="button" id="btn-triage" class="btn primary no-print">Rank patients with Nemotron</button>
+  </div>
 </dialog>
 {% endif %}
 

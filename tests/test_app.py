@@ -111,3 +111,73 @@ def test_secret_key_survives_restarts(tmp_path, monkeypatch):
     assert load_secret(path) == first
     monkeypatch.setenv("NG_SECRET", "from-env")
     assert load_secret(path) == "from-env"
+
+
+def test_incident_board_is_therapist_only(client):
+    _login(client, "patient")
+    assert client.get("/api/incidents").status_code == 403
+    assert client.get("/api/audit").status_code == 403
+
+
+def test_denied_request_is_audited_and_opens_security_incident(client):
+    _login(client, "patient")
+    client.post("/api/difficulty", json={"level": 5})
+    client.get("/logout")
+    _login(client, "therapist")
+    incs = client.get("/api/incidents").get_json()["incidents"]
+    sec = [i for i in incs if i["category"] == "security"]
+    assert sec and "/api/difficulty" in sec[0]["detail"]
+    actions = [r["action"] for r in client.get("/api/audit").get_json()["audit"]]
+    assert "denied" in actions and "login" in actions
+
+
+def test_failed_logins_lock_out_and_raise_incident(client):
+    for _ in range(5):
+        _login(client, "therapist", "wrong")
+    r = _login(client, "therapist")
+    assert r.status_code == 429 and b"Too many" in r.data
+
+
+def test_three_failed_logins_open_security_incident(client):
+    for _ in range(3):
+        _login(client, "therapist", "wrong")
+    # lockout not reached yet: the right password still works
+    assert _login(client, "therapist").status_code == 302
+    incs = client.get("/api/incidents").get_json()["incidents"]
+    assert any(i["kind"] == "failed_logins" for i in incs)
+
+
+def test_incident_workflow_over_http(client):
+    _login(client, "therapist")
+    inc = client.post("/api/incidents", json={"title": "Pad came loose", "severity": "high",
+                                              "category": "device", "detail": "left temple"}).get_json()
+    iid = inc["id"]
+    assert client.post(f"/api/incidents/{iid}/ack").get_json()["status"] == "acknowledged"
+    assert client.post(f"/api/incidents/{iid}/note", json={"text": "re-taped"}).status_code == 200
+    assert client.post(f"/api/incidents/{iid}/note", json={"text": "  "}).status_code == 400
+    done = client.post(f"/api/incidents/{iid}/resolve", json={"text": "fixed"}).get_json()
+    assert done["status"] == "resolved" and done["timeline"][-1]["text"] == "fixed"
+    assert client.post("/api/incidents/INC-1/ack").status_code == 404
+    assert client.post("/api/incidents", json={"title": "x", "severity": "apocalyptic"}).status_code == 400
+    counts = client.get("/api/incidents").get_json()["counts"]
+    assert counts["resolved"] >= 1
+
+
+def test_population_triage_covers_everyone(client):
+    _login(client, "therapist")
+    body = client.get("/api/triage/population?limit=50").get_json()
+    assert body["summary"]["total"] == 1200 and len(body["patients"]) == 50
+    assert body["patients"][0]["urgency"] == "urgent"
+    if body["summary"]["unassigned_urgent"]:
+        incs = client.get("/api/incidents").get_json()["incidents"]
+        assert any(i["category"] == "caseload" for i in incs)
+
+
+def test_population_brief_needs_key(client):
+    _login(client, "therapist")
+    assert client.post("/api/triage/brief").status_code == 503
+
+
+def test_security_headers(client):
+    r = client.get("/login")
+    assert r.headers["X-Frame-Options"] == "DENY" and r.headers["X-Content-Type-Options"] == "nosniff"

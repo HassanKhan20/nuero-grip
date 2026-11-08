@@ -11,6 +11,8 @@ class MemoryStore:
         self._sessions: list[dict] = []
         self._events: list[dict] = []
         self._patients: dict[str, dict] = {}
+        self._incidents: dict[str, dict] = {}
+        self._audit: list[dict] = []
 
     def save_session(self, doc: dict) -> str:
         doc = {**copy.deepcopy(doc), "_id": uuid.uuid4().hex, "saved_at": time.time()}
@@ -30,6 +32,16 @@ class MemoryStore:
 
     def upsert_patient(self, doc: dict) -> None:
         self._patients[doc["patient_id"]] = dict(doc)
+
+    def upsert_incident(self, doc: dict) -> None:
+        self._incidents[doc["id"]] = copy.deepcopy(doc)
+
+    def incidents(self) -> list[dict]:
+        return copy.deepcopy(list(self._incidents.values()))
+
+    def log_audit(self, doc: dict) -> None:
+        self._audit.append(dict(doc))
+        del self._audit[:-5000]
 
 
 class MongoStore:
@@ -56,6 +68,15 @@ class MongoStore:
 
     def upsert_patient(self, doc: dict) -> None:
         self.db.patients.replace_one({"patient_id": doc["patient_id"]}, doc, upsert=True)
+
+    def upsert_incident(self, doc: dict) -> None:
+        self.db.incidents.replace_one({"id": doc["id"]}, dict(doc), upsert=True)
+
+    def incidents(self) -> list[dict]:
+        return list(self.db.incidents.find({}, {"_id": 0}))
+
+    def log_audit(self, doc: dict) -> None:
+        self.db.audit.insert_one(dict(doc))
 
 
 def make_store() -> MemoryStore | MongoStore:

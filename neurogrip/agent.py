@@ -14,21 +14,27 @@ NEMOTRON_KWARGS = {"temperature": 1.0, "top_p": 0.95,
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 SYSTEM_PROMPT = """You are NeuroGrip's neurorehabilitation AI agent, working alongside a licensed therapist.
-You have four tools:
+You have six tools:
 1. get_session_metrics: current session reps, reaction latency ms, tremor Hz, gate activation rate %
    (the % of time the patient's intent was strong enough to move the robotic hand), session time.
 2. get_patient_history: the patient's previous sessions from the database.
 3. set_difficulty: sets the intent-detection threshold level (1 = easiest, 5 = hardest) for the next set.
 4. trigger_feedback: sends an alert to the therapist dashboard and the patient's buzzer/LEDs.
+5. get_open_incidents: what the live detection rules flagged (tremor, slow or missed reactions,
+   finger-tap slowdown, sensor or camera faults) that is not resolved yet.
+6. open_incident: escalate a concern to the clinic's incident board so a therapist owns it.
 
 After each set of reps:
 - Call get_session_metrics to see how the patient did.
 - Call get_patient_history to compare against past sessions.
+- Call get_open_incidents and take the live detections into account (mention them in the summary).
 - Decide whether to make it harder, easier, or keep it the same, and call set_difficulty with your decision.
   Raise it when activation rate is above 80%; lower it when activation is below 40%; otherwise keep the same level.
 - If any metric is declining versus past sessions (activation rate falling, latency or tremor rising),
   call trigger_feedback with kind "warning" and a short message naming the metric.
   Use "celebrate" for a clear improvement.
+- If you find a real concern that is not already an open incident, call open_incident
+  (severity "high" for a sharp decline, otherwise "medium").
 
 Before EVERY tool call, write one short sentence explaining your reasoning.
 Finish with ONLY a JSON object:
@@ -75,10 +81,15 @@ class ToolBox:
         _fn("trigger_feedback", "Send an alert to the therapist dashboard and cue the patient through the buzzer and LEDs.",
             {"kind": {"type": "string", "enum": list(FEEDBACK)}, "message": {"type": "string"}},
             ["kind", "message"]),
+        _fn("get_open_incidents", "Unresolved incidents from the live detection rules and responders, newest first."),
+        _fn("open_incident", "Escalate a concern to the clinic incident board for a therapist to own.",
+            {"title": {"type": "string"}, "severity": {"type": "string", "enum": ["low", "medium", "high"]},
+             "detail": {"type": "string"}}, ["title", "severity", "detail"]),
     ]
 
-    def __init__(self, engine):
+    def __init__(self, engine, incidents=None):
         self.engine = engine
+        self.incidents = incidents
 
     def get_session_metrics(self) -> dict:
         s = self.engine.state()
@@ -101,6 +112,24 @@ class ToolBox:
         self.engine.send(fmt_led(led))
         self.engine.post_event({"type": "agent_alert", "kind": kind, "message": message})
         return {"sent": kind, "message": message, "dashboard": True}
+
+    def get_open_incidents(self) -> list[dict]:
+        if self.incidents is None:
+            return []
+        rows = [i for i in self.incidents.list() if i["status"] != "resolved"][:10]
+        keep = ("id", "title", "severity", "category", "status", "detail", "count", "scope")
+        return [{k: i[k] for k in keep} for i in rows]
+
+    def open_incident(self, title: str, severity: str = "medium", detail: str = "") -> dict:
+        if self.incidents is None:
+            return {"error": "incident board not connected"}
+        if severity not in ("low", "medium", "high"):
+            severity = "medium"
+        slug = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")[:40] or "flag"
+        inc = self.incidents.raise_incident(f"agent:{slug}", str(title)[:120], severity, "clinical",
+                                            {"patient": self.engine.patient_id}, str(detail)[:500],
+                                            actor="Nemotron agent")
+        return {"id": inc["id"], "status": inc["status"], "severity": inc["severity"]}
 
     def call(self, name: str, arguments: str) -> tuple[dict, object]:
         try:
@@ -143,7 +172,7 @@ def _parse_final(content: str) -> dict:
     return {"summary": text, "next_session_plan": ""}
 
 
-def run_agent(client, model: str, tools: ToolBox, max_steps: int = 6) -> dict:
+def run_agent(client, model: str, tools: ToolBox, max_steps: int = 8) -> dict:
     eng = tools.engine
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},

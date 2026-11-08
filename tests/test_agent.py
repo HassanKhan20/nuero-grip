@@ -113,3 +113,35 @@ def test_nvidia_client_has_short_timeout(monkeypatch):
     monkeypatch.setenv("NVIDIA_API_KEY", "x")
     c = make_nvidia_client()
     assert c.timeout == 45 and c.max_retries == 1
+
+
+def _tools_with_incidents():
+    from neurogrip.incidents import IncidentLog
+    log = IncidentLog()
+    return ToolBox(Engine(MockSource(), MockVision(), MemoryStore()), incidents=log), log
+
+
+def test_original_four_tools_still_first():
+    names = [s["function"]["name"] for s in ToolBox.SCHEMAS]
+    assert names[:4] == ["get_session_metrics", "get_patient_history", "set_difficulty", "trigger_feedback"]
+    assert {"get_open_incidents", "open_incident"} <= set(names)
+
+
+def test_agent_reads_live_detections():
+    tools, log = _tools_with_incidents()
+    log.raise_incident("tremor", "Tremor 4.8 Hz detected", "medium", "clinical", {"patient": "demo"}, "x")
+    rows = tools.get_open_incidents()
+    assert rows[0]["title"] == "Tremor 4.8 Hz detected" and "timeline" not in rows[0]
+
+
+def test_agent_opens_incident_as_itself():
+    tools, log = _tools_with_incidents()
+    out = tools.open_incident("Activation falling", "high", "68% -> 41% over 5 sessions")
+    inc = log.get(out["id"])
+    assert inc["severity"] == "high" and inc["timeline"][0]["actor"] == "Nemotron agent"
+    assert inc["category"] == "clinical" and inc["scope"]["patient"] == "demo"
+
+
+def test_incident_tools_without_log_report_error():
+    assert "error" in _tools().open_incident("x", "low", "y")
+    assert _tools().get_open_incidents() == []
