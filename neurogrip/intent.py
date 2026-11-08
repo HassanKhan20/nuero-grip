@@ -18,7 +18,7 @@ import numpy as np
 from .protocol import SensorFrame
 
 CAL_FRACTIONS = [0.2, 0.3, 0.4, 0.5, 0.6]  # share of personal range needed to count as trying, per level
-MIN_RANGE = 0.006                          # floor: a site that changes less than 0.6% at full effort isn't usable
+MIN_RANGE = 0.002                          # floor: a site that changes less than 0.2% at full effort isn't usable
 NOISE_MARGIN = 4.0                         # ...and full effort must stand at least 4x above the relaxed jitter
 NOISE_TRIGGER = 2.5                        # the trigger never sits closer than 2.5x the relaxed jitter
 SITE_NAMES = ("temple", "forearm")
@@ -100,6 +100,15 @@ class IntentDetector:
         self._baseline, self.full = tuple(baseline), full
         self._dir = getattr(full, "directions", (1, 1))
         self._above = self._artifact_frames = 0
+
+    def debug(self) -> dict:
+        """What the detector is comparing against right now (temple site), for the live view."""
+        base = self._baseline[0] if self._baseline else None
+        full = self.full[0] if self.full else None
+        noise = getattr(self.full, "noise", (0.0, 0.0))[0] if self.full else None
+        return {"baseline": round(base, 1) if base else None, "full_pct": round(full * 100, 2) if full else None,
+                "direction": getattr(self, "_dir", (1, 1))[0], "fraction": self.fraction,
+                "noise_pct": round(noise * 100, 2) if noise is not None else None}
 
     def rezero(self) -> None:
         """Take a fresh relaxed baseline from the next frames (e.g. after putting the headband on).

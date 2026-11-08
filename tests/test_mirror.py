@@ -101,3 +101,18 @@ def test_normal_focus_closes_fist_fully():
     for _ in range(60):
         out = g.step(IntentState(True, True, 0.75, 0.2, 0.2), VisionResult(None))
     assert out.angles == (128, 160, 160, 160, 160)
+
+
+def test_engine_smooths_pad_jitter_and_passes_link_loss():
+    from neurogrip.engine import Engine
+    from neurogrip.sources import MockSource
+    from neurogrip.store import MemoryStore
+    from neurogrip.vision import MockVision
+    e = Engine(MockSource(), MockVision(), MemoryStore(), kind="hardware")
+    e.smooth_frames = 4
+    from collections import deque
+    e._pad_hist = deque(maxlen=4)
+    vals = [e._smooth(Frame(i, v, 1900, 0, 0, 1000)).temple for i, v in enumerate([1176, 1180, 1176, 1180])]
+    assert vals[-1] == 1178.0
+    assert e._smooth(Frame(9, 0, 0, 0, 0, 1000)).temple == 0
+    assert e._smooth(Frame(10, 1190, 1900, 0, 0, 1000)).temple == 1190.0  # window restarted after the dropout

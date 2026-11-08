@@ -8,6 +8,7 @@ import random
 import threading
 import time
 from collections import deque
+from dataclasses import replace
 from pathlib import Path
 from typing import Callable
 
@@ -47,6 +48,7 @@ class Engine:
         self.listeners: list[Callable[[dict], None]] = []
         self.new_events: deque[dict] = deque(maxlen=200)
         self._mags: deque[float] = deque(maxlen=256)
+        self._pad_hist: deque[tuple[int, int]] = deque(maxlen=16)
         self._cv_hist: deque[tuple[float, float, float]] = deque(maxlen=400)
         self._last_frame_id = -1
         self._frames = 0
@@ -72,8 +74,21 @@ class Engine:
         with self._lock:
             self.source.send(cmd)
 
+    smooth_frames = 1  # >1: moving average of the pad readings (hardware: tames +-2-count touch jitter)
+
+    def _smooth(self, f):
+        if self.smooth_frames <= 1:
+            return f
+        if f.temple <= 0 or f.forearm < 0:  # link lost: pass it through untouched, restart the window
+            self._pad_hist.clear()
+            return f
+        self._pad_hist.append((f.temple, f.forearm))
+        n = len(self._pad_hist)
+        return replace(f, temple=round(sum(v[0] for v in self._pad_hist) / n, 1),
+                       forearm=round(sum(v[1] for v in self._pad_hist) / n, 1))
+
     def step(self) -> dict:
-        f = self.source.read()
+        f = self._smooth(self.source.read())
         self._last_frame_at = time.monotonic()
         with self._lock:
             self._t_ms = f.ms
@@ -229,6 +244,7 @@ class Engine:
                     "control_mode": self.gate.control, "grip": self.gate.grip,
                     "touch": dict(self._touch),
                     "range_calibrated": self.intent.range_calibrated,
+                    "intent_debug": self.intent.debug(),
                     "calibration_phase": self._cal_phase,
                     "calibration_remaining_s": round(max(0, self._cal_until - self._t_ms) / 1000, 1)
                     if self._cal_phase else 0.0,
@@ -338,6 +354,8 @@ def make_engine() -> Engine:
         engine = Engine(SerialSource(os.environ["NG_SERIAL_PORT"]), CameraVision(camera), store, kind="hardware")
     engine.set_control(os.environ.get("NG_CONTROL", default_control(kind)), os.environ.get("NG_GRIP", "fist"))
     if kind == "hardware":
+        engine.smooth_frames = int(os.environ.get("NG_SMOOTH", "6"))  # 6 frames = 120 ms at 50 Hz
+        engine._pad_hist = deque(maxlen=max(1, engine.smooth_frames))
         engine.load_range(os.environ.get("NG_CAL_FILE", str(Path(__file__).resolve().parent.parent / ".ng_calibration.json")))
     if os.environ.get("NG_LEVEL"):  # starting difficulty 1-5 (1 = lowest trigger)
         engine.set_difficulty(int(os.environ["NG_LEVEL"]))
