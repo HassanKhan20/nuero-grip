@@ -5,7 +5,8 @@ import re
 
 from .protocol import fmt_buzzer, fmt_led
 
-DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b"  # hosted on build.nvidia.com; the v1.5 49B was retired
+# Free endpoint on build.nvidia.com (tool calling + reasoning). Fallback: NEMOTRON_MODEL=nvidia/nemotron-3-super-120b-a12b
+DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 # Model-card settings: temperature 1.0 / top_p 0.95 for all tasks; reasoning on, low effort (fast enough for a live
 # demo). The reasoning trace comes back in message.reasoning_content and is shown in the dashboard tool trace.
 NEMOTRON_KWARGS = {"temperature": 1.0, "top_p": 0.95,
