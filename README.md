@@ -36,4 +36,6 @@ Optional keys (features show a clear error without them):
 
 Tests: `.venv\Scripts\python -m pytest tests -q`
 
+Check Nemotron with your key (ping, agent tool calls, triage): `.venv\Scripts\python scripts\check_nemotron.py`
+
 The first camera run downloads the MediaPipe models into `models/`, so it needs internet. Tune curl detection by running `.venv\Scripts\python -m neurogrip.vision`. Firmware and wiring are in [firmware/README.md](firmware/README.md).
