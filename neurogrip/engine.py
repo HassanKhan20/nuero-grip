@@ -20,7 +20,7 @@ from .intent import CAL_FRACTIONS, IntentDetector, SiteRange, calibrate_from
 from .metrics import SessionMetrics
 from .protocol import fmt_buzzer, fmt_led, fmt_servo
 from .signals import steadiness, tremor_frequency
-from .sources import FRAME_MS, IntentControl, MockSource, SerialSource
+from .sources import FRAME_MS, HandBoard, IntentControl, MockSource, SerialSource
 from .store import make_store
 from .vision import CameraVision, MockVision
 
@@ -93,6 +93,8 @@ class Engine:
         with self._lock:
             self._t_ms = f.ms
             istate = self.intent.update(f)
+            if self.control.always:  # hand + camera, no headband: the robot copies the camera all the time
+                istate = replace(istate, calibrated=True, active=True, strength=1.0, link_lost=False)
             self._touch = {"temple": f.temple, "forearm": f.forearm,
                            "temple_drop": istate.temple_drop, "forearm_drop": istate.forearm_drop}
             cal_events = self._calibration_step(f)
@@ -250,6 +252,8 @@ class Engine:
                     if self._cal_phase else 0.0,
                     "camera_ok": getattr(self.vision, "available", True),
                     "intent_held": self.control.held, "intent_auto": self.control.auto,
+                    "intent_always": self.control.always,
+                    "hand_connected": getattr(getattr(self.source, "output", None), "connected", None),
                     "cue_pending": self._cue_at_ms is not None,
                     "cue_active": self.metrics.trial_active,
                     "tapping_active": self._tap_start_ms is not None,
@@ -349,7 +353,12 @@ def make_engine() -> Engine:
         tremor = float(os.environ.get("NG_MOCK_TREMOR", "4.5"))
         engine = Engine(MockSource(tremor_hz=tremor, realtime=True), MockVision(tremor_hz=tremor), store, kind="mock")
     elif kind == "camera":
-        engine = Engine(MockSource(control=IntentControl(), realtime=True), CameraVision(camera), store, kind="camera")
+        # optional robot hand on USB with no headband (NG_HAND_PORT); NG_ALWAYS_ON=1: it copies the camera
+        # all the time instead of only while Hold to try / Space is held
+        hand = HandBoard(os.environ["NG_HAND_PORT"]) if os.environ.get("NG_HAND_PORT") else None
+        control = IntentControl(always=os.environ.get("NG_ALWAYS_ON") == "1")
+        engine = Engine(MockSource(control=control, realtime=True, output=hand), CameraVision(camera), store,
+                        kind="camera")
     else:
         engine = Engine(SerialSource(os.environ["NG_SERIAL_PORT"]), CameraVision(camera), store, kind="hardware")
     engine.set_control(os.environ.get("NG_CONTROL", default_control(kind)), os.environ.get("NG_GRIP", "fist"))
