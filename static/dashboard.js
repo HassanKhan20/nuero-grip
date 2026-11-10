@@ -334,13 +334,14 @@ function renderControl(s) {
   document.querySelectorAll("[data-grip]").forEach((b) => b.classList.toggle("on", b.dataset.grip === s.grip));
   $("grip-row").hidden = !intentMode;
   const hw = s.source_kind === "hardware";
-  $("sim-intent").hidden = hw;
-  $("hw-intent").hidden = !hw;
+  $("sim-intent").hidden = hw || s.intent_always;
+  $("hw-intent").hidden = !hw && !s.intent_always;
+  setText("hw-intent", s.intent_always ? "No headband: the robot copies your hand all the time" : "Headband connected");
   $("auto-intent").checked = s.intent_auto;
   $("btn-hold").classList.toggle("active", s.intent_held);
 
   setText("intent-val", s.intent_strength.toFixed(2));
-  setText("intent-label", !s.calibrated ? "Calibrating" : s.intent_active ? "Trying" : "Relaxed");
+  setText("intent-label", s.intent_always ? "Always on" : !s.calibrated ? "Calibrating" : s.intent_active ? "Trying" : "Relaxed");
   $("intent-label").classList.toggle("on", s.intent_active);
   wave.push(s.intent_strength);
   if (wave.length > 100) wave.shift();
@@ -379,7 +380,9 @@ function render(s) {
   window.dispatchEvent(new CustomEvent("ng-state", { detail: s }));
   if (!tourChecked) { tourChecked = true; tour.startIfNew(); }
   if (s.mode !== currentMode) { currentMode = s.mode; applyCondition(s.mode); }
-  const src = SOURCE_LABELS[s.source_kind] || s.source_kind;
+  let src = SOURCE_LABELS[s.source_kind] || s.source_kind;
+  if (s.hand_connected === true) src += " + robot hand";
+  else if (s.hand_connected === false) src += " · robot hand not connected";
   setText("source-label", src);
   setText("cond-note", `${src} · ${(CONDITIONS[s.mode] || CONDITIONS.stroke).note(s)}`);
 
